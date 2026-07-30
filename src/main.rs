@@ -3,16 +3,16 @@ const REST_URL: &str = "https://localhost/rest/";
 const USER_ID: &str = "54828a041facb13484c2014d7d3cf8fa";
 const USER_TOKEN: &str = "ZBT0E4UaVk4xV4bHxTwxLETCaXEr7QO5";
 
-/// http://localhost/seitentypen/blog/eintrag-1
-const TEST_SITE: &str = "56";
+/// <http://localhost/seitentypen/blog/eintrag-1>
+const TEST_SITE: &str = "62";
 
-///http://localhost/admin.php?site=materialkit&lang=de&id=56
+/// <http://localhost/admin.php?site=materialkit&lang=de&id=56>
 const SITE_URL: &str = "materialkit/de/";
 
 pub mod communicator;
 
 use communicator::Communicator;
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let communicator = Communicator::new(
@@ -22,21 +22,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         USER_TOKEN.to_string(),
     )?;
 
-    let result = communicator.get_page(TEST_SITE)?;
-    println!("{:?}", result.json::<Value>());
+    let mut result = communicator.get_page(TEST_SITE)?.json::<Value>()?;
 
-    /*
-    let result = communicator.update_extra(TEST_SITE)?;
-    println!("{:?}", result);
+    result["extra"]["_contents"]["center"][0]["content1"] = "<p>Success!</p>".into();
+
+    let mut new_extra = Map::new();
+    new_extra.insert("extra".into(), result["extra"].take());
+
+    let _ = communicator.update_extra(TEST_SITE, &new_extra.into())?;
 
     let result = communicator.get_page(TEST_SITE)?;
-    println!(
-        "{:?}",
-        result
-            .json::<Value>()?
-            .pointer("/extra/_contents/center/0/content1")
-    );
-     */
+    println!("{}", result.json::<Value>()?);
+    println!();
 
     Ok(())
 }

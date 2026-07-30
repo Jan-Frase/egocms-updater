@@ -1,12 +1,14 @@
 use reqwest::Error;
 use reqwest::blocking::{Client, Response};
+use serde::Serialize;
+use serde_json::Value;
 
 /// This struct takes care of communications with the EgoCMS.
 /// It implements functions that cover required parts of the EgoCMS API.
 pub struct Communicator {
     /// The base URL of the rest api we are trying to communicate with. E.g.: https://localhost/rest/
     rest_url: String,
-    /// Some API calls are SITE-specific and require the site_url appended to the rest_url.
+    /// Some API calls are SITE-specific and require the site_url appended to the `rest_url`.
     /// E.g.: https://localhost/rest/materialkit/de
     /// So for this example the site_url should be "materialkit/de/".
     /// This approach fails when multiple languages are supposed to be updated, but that's fine for now.
@@ -21,6 +23,7 @@ pub struct Communicator {
 }
 
 // Small internal helper :)
+#[derive(Copy, Clone)]
 enum ReqestType {
     Get,
     Put,
@@ -36,7 +39,7 @@ impl Drop for Communicator {
 
         match result {
             Ok(_) => {}
-            Err(err) => println!("Error whilst closing the connection: {}", err),
+            Err(err) => println!("Error whilst closing the connection: {err}"),
         }
     }
 }
@@ -87,15 +90,18 @@ impl Communicator {
     /// This fully replaces the contents of the extra part of the page!
     /// It should thus be used by first getting `extra` modifying it, and then updating :)
     /// https://hilfe.egocms.com/entwicklung/klassen-_-funktionen/page/updateextra
-    pub fn update_extra(&self, id: &str) -> Result<Response, Error> {
+    pub fn update_extra(&self, id: &str, new_extra: &Value) -> Result<Response, Error> {
         let update_extra_url =
             format!("{}{}{}{}", self.rest_url, self.site_url, id, "/updateExtra");
 
-        // PHP's array format is strange but this works.
-        // TODO: Remove this hard-coded part.
-        let params = vec![("extra[_contents/center/0/content1]", "ugabuga")];
+        let result = self
+            .client
+            .put(update_extra_url)
+            .json(new_extra)
+            .send()?
+            .error_for_status()?;
 
-        self.send_request(ReqestType::Put, update_extra_url.as_str(), params.into())
+        Ok(result)
     }
 
     // https://hilfe.egocms.com/entwicklung/klassen-_-funktionen/page/newchild
@@ -113,7 +119,7 @@ impl Communicator {
             ("nav_hide", "1"),
         ];
 
-        self.send_request(ReqestType::Put, new_child_url.as_str(), params.into())
+        self.send_request(ReqestType::Put, new_child_url.as_str(), Some(&params))
     }
 
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -125,7 +131,7 @@ impl Communicator {
         let get_extra_url = format!("{}{}{}", self.rest_url, self.site_url, "getPage");
         let params = vec![("id", id)];
 
-        self.send_request(ReqestType::Get, get_extra_url.as_str(), params.into())
+        self.send_request(ReqestType::Get, get_extra_url.as_str(), Some(&params))
     }
 }
 
@@ -144,7 +150,7 @@ impl Communicator {
             ("token", self.user_token.as_str()),
         ];
 
-        self.send_request(ReqestType::Put, start_session_url.as_str(), params.into())
+        self.send_request(ReqestType::Put, start_session_url.as_str(), Some(&params))
     }
 
     /// Closes the session.
@@ -152,16 +158,16 @@ impl Communicator {
     fn close_session(&self) -> Result<Response, Error> {
         let start_session_url = format!("{}{}", self.rest_url, "closeSession");
 
-        self.send_request(ReqestType::Put, start_session_url.as_str(), None)
+        self.send_request::<()>(ReqestType::Put, start_session_url.as_str(), None)
     }
 
     /// Small utility function to avoid typing the same lines all the time :)
     /// Can be used to send a GET or POST request either with or without query params.
-    fn send_request(
+    fn send_request<T: Serialize + ?Sized>(
         &self,
         request_type: ReqestType,
         request_url: &str,
-        params: Option<Vec<(&str, &str)>>,
+        params: Option<&T>,
     ) -> Result<Response, Error> {
         let mut builder = match request_type {
             ReqestType::Get => self.client.get(request_url),
