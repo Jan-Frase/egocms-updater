@@ -2,6 +2,7 @@
 
 lorem ipsum
 
-## Rough Design Outline
+## TODOS
 
-- Have homepage.md be a child of the core page?
+- Introduce AnyHow
+- Read Docs for Users and Future Devs

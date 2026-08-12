@@ -1,0 +1,18 @@
+# This file defines a bunch of constants.
+# I figured it might be nice to not have them scattered in the code but collected here.
+
+# REST API base URL.
+rest_url = "https://localhost/rest/"
+
+# The site part.
+site_url = "materialkit/de/"
+
+# Path to the mapping CSV.
+mapping_table = "./config/mapping_table.csv"
+
+# Directory where Markdown pages are stored.
+markdown_dir = "./pages/"
+
+# When this is true, invalid TSL certs will be accepted!
+# This is required for local EgoCMS instances but should NEVER be `true` in production!
+is_test_environment = "true"

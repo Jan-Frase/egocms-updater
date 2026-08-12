@@ -5,12 +5,16 @@ edition = "2024"
 
 [dependencies]
 reqwest = { version = "0.13.4", features = ["blocking", "query", "cookies", "json", "form"] }
-serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+serde = { version = "1.0.229", features = ["derive"] }
+csv = "1.4.0"
+toml = "1.1.4"
+anyhow = "1.0.104"
 
 [lints.clippy]
 # Enable the pedantic group for the project.
 pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
 
 # Disable some documentation links I found a bit too much for this project.
 doc_markdown = "allow"  # Missing backticks, bare URLs, etc.

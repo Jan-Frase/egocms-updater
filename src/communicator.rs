@@ -1,6 +1,4 @@
-use reqwest::Error;
 use reqwest::blocking::{Client, Response};
-use serde::Serialize;
 use serde_json::Value;
 
 /// This struct takes care of communications with the EgoCMS.
@@ -14,19 +12,12 @@ pub struct Communicator {
     /// This approach fails when multiple languages are supposed to be updated, but that's fine for now.
     site_url: String,
     /// The ID of the user who is authoring the requests. This id can be found in the admin section
-    /// of EgoCMS by checking: Verwaltung > Rollen > [Click on the user name] > Bottom right corner.
+    /// of EgoCMS by checking: Verwaltung > Rollen > [Click on the username] > Bottom right corner.
     user_id: String,
     /// Can be set per user in the admin section like above.
     user_token: String,
     /// Used to make requests with, holds a pool of connections internally.
     client: Client,
-}
-
-// Small internal helper :)
-#[derive(Copy, Clone)]
-enum ReqestType {
-    Get,
-    Put,
 }
 
 // Automatically close the connection when the Communicator gets dropped.
@@ -39,7 +30,7 @@ impl Drop for Communicator {
 
         match result {
             Ok(_) => {}
-            Err(err) => println!("Error whilst closing the connection: {err}"),
+            Err(err) => eprintln!("Error whilst closing the connection: {err}"),
         }
     }
 }
@@ -64,14 +55,17 @@ impl Communicator {
         site_url: String,
         user_id: String,
         user_token: String,
-    ) -> Result<Communicator, Error> {
-        let client = Client::builder()
-            // TODO: This is unacceptable in production! It is however required for testing with localhost.
-            .tls_danger_accept_invalid_certs(true)
-            .cookie_store(true)
-            .build()?;
+        is_test_environment: bool,
+    ) -> anyhow::Result<Self> {
+        let mut client = Client::builder();
 
-        let communicator = Communicator {
+        if is_test_environment {
+            client = client.tls_danger_accept_invalid_certs(true);
+        }
+
+        let client = client.cookie_store(true).build()?;
+
+        let communicator = Self {
             rest_url,
             site_url,
             user_id,
@@ -90,7 +84,7 @@ impl Communicator {
     /// This fully replaces the contents of the extra part of the page!
     /// It should thus be used by first getting `extra` modifying it, and then updating :)
     /// https://hilfe.egocms.com/entwicklung/klassen-_-funktionen/page/updateextra
-    pub fn update_extra(&self, id: &str, new_extra: &Value) -> Result<Response, Error> {
+    pub fn update_extra(&self, id: &str, new_extra: &Value) -> anyhow::Result<Response> {
         let update_extra_url =
             format!("{}{}{}{}", self.rest_url, self.site_url, id, "/updateExtra");
 
@@ -100,26 +94,7 @@ impl Communicator {
             .json(new_extra)
             .send()?
             .error_for_status()?;
-
         Ok(result)
-    }
-
-    // https://hilfe.egocms.com/entwicklung/klassen-_-funktionen/page/newchild
-    pub fn new_child(&self, parent_id: &str) -> Result<Response, Error> {
-        let new_child_url = format!(
-            "{}{}{}{}",
-            self.rest_url, self.site_url, parent_id, "/newChild"
-        );
-
-        let params: Vec<(&str, &str)> = vec![
-            ("field[name]", "ChildName"),
-            ("field[title]", "ChildTitle"),
-            ("fields[type", "page"),
-            ("inactive", "0"),
-            ("nav_hide", "1"),
-        ];
-
-        self.send_request(ReqestType::Put, new_child_url.as_str(), Some(&params))
     }
 
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -127,11 +102,17 @@ impl Communicator {
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~
     /// This needs a page id to get a page's information, like it content etc.
     /// https://hilfe.egocms.com/entwicklung/klassen-_-funktionen/site/getpage
-    pub fn get_page(&self, id: &str) -> Result<Response, Error> {
+    pub fn get_page(&self, id: &str) -> anyhow::Result<Response> {
         let get_extra_url = format!("{}{}{}", self.rest_url, self.site_url, "getPage");
         let params = vec![("id", id)];
 
-        self.send_request(ReqestType::Get, get_extra_url.as_str(), Some(&params))
+        let result = self
+            .client
+            .get(get_extra_url)
+            .query(&params)
+            .send()?
+            .error_for_status()?;
+        Ok(result)
     }
 }
 
@@ -143,43 +124,32 @@ impl Communicator {
     /// The request then returns a session cookie which we need to send together with all future requests.
     /// The session cookie is automatically stored and appended by the client.
     /// https://hilfe.egocms.com/entwicklung/json_rest-api/erste-schritte
-    fn start_session(&self) -> Result<Response, Error> {
+    fn start_session(&self) -> anyhow::Result<Response> {
         let start_session_url = format!("{}{}", self.rest_url, "startSession");
         let params = vec![
             ("user_id", self.user_id.as_str()),
             ("token", self.user_token.as_str()),
         ];
 
-        self.send_request(ReqestType::Put, start_session_url.as_str(), Some(&params))
+        let result = self
+            .client
+            .put(start_session_url)
+            .query(&params)
+            .send()?
+            .error_for_status()?;
+        Ok(result)
     }
 
     /// Closes the session.
     /// Is automatically called when the Communicator goes out of scope.
-    fn close_session(&self) -> Result<Response, Error> {
+    fn close_session(&self) -> anyhow::Result<Response> {
         let start_session_url = format!("{}{}", self.rest_url, "closeSession");
 
-        self.send_request::<()>(ReqestType::Put, start_session_url.as_str(), None)
-    }
-
-    /// Small utility function to avoid typing the same lines all the time :)
-    /// Can be used to send a GET or POST request either with or without query params.
-    fn send_request<T: Serialize + ?Sized>(
-        &self,
-        request_type: ReqestType,
-        request_url: &str,
-        params: Option<&T>,
-    ) -> Result<Response, Error> {
-        let mut builder = match request_type {
-            ReqestType::Get => self.client.get(request_url),
-            ReqestType::Put => self.client.put(request_url),
-        };
-
-        if let Some(params) = params {
-            builder = builder.query(&params);
-        }
-
-        let result = builder.send()?.error_for_status()?;
-
+        let result = self
+            .client
+            .put(start_session_url)
+            .send()?
+            .error_for_status()?;
         Ok(result)
     }
 }
