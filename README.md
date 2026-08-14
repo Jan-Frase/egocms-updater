@@ -18,7 +18,7 @@ Feel free to fork or ask questions :)
 
 ## How to use
 
-- Configure the `config/config.toml`. It contains various essential settings like the URLs or various relevant paths.
+- Configure the `config/config.toml`. It contains essential settings like the URLs or various relevant paths.
     ```csv
     # REST API base URL.
     rest_url = "https://localhost/rest/"
