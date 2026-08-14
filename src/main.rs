@@ -71,9 +71,9 @@ fn main() -> anyhow::Result<()> {
         args.user_token,
         &config.is_test_environment,
     )
-        .context(
-            "Failed to open a connection to the EgoCMS REST API. Are the user_id and user_token valid?",
-        )?;
+    .context(
+        "Failed to open a connection to the EgoCMS REST API. Are the user_id and user_token valid?",
+    )?;
 
     println!("=> Success.");
     println!();
