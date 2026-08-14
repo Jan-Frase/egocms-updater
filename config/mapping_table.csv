@@ -1,6 +1,8 @@
 # This establishes a mapping from the ID that EgoCMS defines for each page and its markdown file.
 page_id,markdown_name
-56,blog_1.md
-58,blog_2.md
-60,blog_3.md
-62,blog_4.md
+56,landing_page.md
+58,research/cosemos.md
+60,research/cosemos_problem_statement.md
+62,research/julea.md
+517,research/research.md
+572,research/smash.md

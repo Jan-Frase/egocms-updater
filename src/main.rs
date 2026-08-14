@@ -10,11 +10,12 @@ use anyhow::{Context, bail};
 use communicator::Communicator;
 use csv::Reader;
 use serde::Deserialize;
+use serde_json::Value;
 use std::collections::HashSet;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
-use serde_json::Value;
+use walkdir::WalkDir;
 
 /// Small struct holding all the required cli-arguments.
 struct Args {
@@ -24,30 +25,34 @@ struct Args {
 }
 
 /// Just a small struct that allows serde to parse the config.toml :)
+/// All fields here are futher documented in the config.toml file.
 #[derive(Deserialize)]
 struct Config {
+    is_test_environment: String,
     rest_url: String,
     site_url: String,
     mapping_table: PathBuf,
     markdown_dir: PathBuf,
-    is_test_environment: String,
+    json_content_path: String,
 }
 
 fn main() -> anyhow::Result<()> {
+    println!("==========================");
     println!("1. Initializing Resources:");
-    println!("=> Parsing arguments.");
+    println!("==========================");
+    print!("1.1. Parsing arguments: ");
 
     // 1.1 Parse the command line arguments.
     let args = parse_arguments().context("Failed to parse the arguments!")?;
 
-    println!("==> Success.");
-    println!("=> Loading config.");
+    println!("=> Success.");
+    print!("1.2. Loading config: ");
 
     // 1.2 Load the provided config.
     let config = load_config(args.config_path).context("Failed to load config!")?;
 
-    println!("==> Success.");
-    println!("=> Loading Mapping table.");
+    println!("=> Success.");
+    print!("1.3. Loading Mapping table: ");
 
     // 1.3 Read the table that maps: Markdown-file <-> EgoCMS-page-id.
     let mut csv = load_table(&config).context(format!(
@@ -55,8 +60,8 @@ fn main() -> anyhow::Result<()> {
         config.mapping_table.display()
     ))?;
 
-    println!("==> Success.");
-    println!("=> Connecting to EgoCMS.");
+    println!("=> Success.");
+    print!("1.4. Connecting to EgoCMS: ");
 
     // 1.4 Open a connection to EgoCMS's REST API.
     let communicator = open_connection(
@@ -70,9 +75,11 @@ fn main() -> anyhow::Result<()> {
             "Failed to open a connection to the EgoCMS REST API. Are the user_id and user_token valid?",
         )?;
 
-    println!("==> Success.");
+    println!("=> Success.");
     println!();
+    println!("==========================");
     println!("2. Checking Mapping Table For Correctness:");
+    println!("==========================");
 
     let mappings: Vec<PageToFileMapping> = csv.deserialize().collect::<Result<Vec<_>, _>>()?;
     check_table_and_config_correctness(&mappings, &config.markdown_dir, &communicator)
@@ -82,14 +89,17 @@ fn main() -> anyhow::Result<()> {
     println!("3. Updating Pages:");
     // For each tracked page...
     for line in mappings {
+        print!("=> The page: {} <-> {}", line.page_id, line.markdown_name);
         // ... create it ...
         let mut page = Page::new(line, &communicator, &config.markdown_dir)?;
 
         // ... and if we need to change something, do so.
-        if !page.is_up_to_date()? {
-            page.update(&communicator)?;
+        if page.is_up_to_date(&config.json_content_path)? {
+            println!(" -> was up-to-date.");
+        } else {
+            page.update(&communicator, &config.json_content_path)?;
 
-            println!("==> Updated {:?}", page.mapping);
+            println!(" -> was successfully updated!");
         }
     }
     println!("Success. Bye :)");
@@ -102,6 +112,7 @@ fn parse_arguments() -> anyhow::Result<Args> {
     if args.len() != EXPECTED_AMOUNT_OF_ARGUMENTS {
         println!(
             r"
+            Help Message:
             EgoCMS Updater for Parcio Websites
             For more details take a look at the README.md :)
 
@@ -198,17 +209,25 @@ fn check_table_and_config_correctness(
     }
     println!("==> Success.");
 
-    // Get the names of everything in the directory.
+    // Get the relative path of all files in the directory.
     let mut md_file_names = Vec::new();
-    for entry in fs::read_dir(markdown_dir)? {
-        md_file_names.push(entry?.file_name().to_string_lossy().to_string());
+    for entry in WalkDir::new(markdown_dir) {
+        let entry = entry?;
+        if entry.file_type().is_file() {
+            md_file_names.push(
+                entry
+                    .path()
+                    .strip_prefix(markdown_dir)?
+                    .to_string_lossy()
+                    .to_string(),
+            );
+        }
     }
 
     // 2. are all files in the dir .md
     println!("=> Does the markdown dir only contain files ending on `.md`?");
     let incorrect_names: Vec<_> = md_file_names
         .iter()
-        //.filter(|name| !name.ends_with(".md"))
         .filter(|name| {
             let name = Path::new(name);
             !name.extension().unwrap().eq_ignore_ascii_case("md")
@@ -253,17 +272,17 @@ fn check_table_and_config_correctness(
     for id in &table_ids {
         let page = communicator
             .get_page(id.as_str())
-            .with_context(|| format!("Failed to fetch page for ID: {}", id))?;
+            .with_context(|| format!("Failed to fetch page for ID: {id}"))?;
 
         let json: Value = page
             .json()
-            .with_context(|| format!("Failed to parse JSON response for ID: {}", id))?;
+            .with_context(|| format!("Failed to parse JSON response for ID: {id}"))?;
 
         // The API returns JSON `null` for non-existent pages.
         if json.is_null() {
             missing_ids.push(id);
         }
-    };
+    }
     if !missing_ids.is_empty() {
         bail!("The IDs [{missing_ids:?} are listed in the table but do not exist.]");
     }

@@ -9,7 +9,7 @@ use std::path::Path;
 pub struct Page {
     pub mapping: PageToFileMapping,
     extra: Value,
-    markdown: String,
+    html: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -35,39 +35,42 @@ impl Page {
             .and_then(|obj| obj.remove("extra"))
             .ok_or_else(|| anyhow::anyhow!("Missing 'extra' key!"))?;
 
-        // 2. Get the markdown.
+        // 2. Create the full markdown path, read it from disk and parse it to html.
         let md_path = path_to_markdown.join(&mapping.markdown_name);
         let markdown = fs::read_to_string(md_path)?;
+        let html = markdown::to_html(&markdown);
 
         // 3. Done :)
         let page = Self {
             mapping,
             extra,
-            markdown,
+            html,
         };
 
         Ok(page)
     }
 
-    pub fn is_up_to_date(&self) -> anyhow::Result<bool> {
+    pub fn is_up_to_date(&self, json_content_path: &str) -> anyhow::Result<bool> {
         // Extract the relevant JSON section.
         let online_content = self
             .extra
-            // TODO: Update when I get access to the real PARCIO sites.
-            .pointer("/_contents/center/0/content1")
+            .pointer(json_content_path)
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("Missing or invalid content1 field."))?;
 
         // Are they the same?
-        Ok(online_content == self.markdown)
+        Ok(online_content == self.html)
     }
 
-    pub fn update(&mut self, communicator: &Communicator) -> anyhow::Result<()> {
+    pub fn update(
+        &mut self,
+        communicator: &Communicator,
+        json_content_path: &str,
+    ) -> anyhow::Result<()> {
         // Update the extra JSON.
-        // TODO: Update when I get access to the real PARCIO sites.
-        match self.extra.pointer_mut("/_contents/center/0/content1") {
+        match self.extra.pointer_mut(json_content_path) {
             None => bail!("Missing or invalid content1 field."),
-            Some(content1) => *content1 = self.markdown.clone().into(),
+            Some(content1) => *content1 = self.html.clone().into(),
         }
 
         // Wrap it like this: { extra: ... }

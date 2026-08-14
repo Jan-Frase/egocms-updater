@@ -1,18 +1,23 @@
 # This file defines a bunch of constants.
-# I figured it might be nice to not have them scattered in the code but collected here.
+# I figured it might be nice to have them collected here instead of scattered throughout the code.
+
+# ==== IMPORTANT ==== #
+# When this is true, invalid TSL certs will be accepted!
+# This is required for local EgoCMS instances but should NEVER be `true` in production!
+is_test_environment = "true"
+# ==== IMPORTANT ==== #
 
 # REST API base URL.
 rest_url = "https://localhost/rest/"
 
-# The site part.
+# A single EgoCMS instance can have multiple sites. This defines which sites we are interested in.
 site_url = "materialkit/de/"
 
-# Path to the mapping CSV.
+# Path to the mapping table CSV.
 mapping_table = "./config/mapping_table.csv"
 
-# Directory where Markdown pages are stored.
+# Directory where the Markdown pages are stored.
 markdown_dir = "./pages/"
 
-# When this is true, invalid TSL certs will be accepted!
-# This is required for local EgoCMS instances but should NEVER be `true` in production!
-is_test_environment = "true"
+# The JSON which defines a EgoCMS page has one section that is relevant to us. This path defines which section that is.
+json_content_path = "/_contents/center/0/content1"

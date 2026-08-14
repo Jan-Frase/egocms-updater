@@ -23,3 +23,9 @@ jobs:
 
       - name: Run tests :)
         run: cargo test
+
+      - name: Update page!
+        with:
+          user_id: ${{secrets.USER_ID}}
+          user_token: ${{secrets.USER_TOKEN}}
+        run: cargo run --release -- ./config/config.toml

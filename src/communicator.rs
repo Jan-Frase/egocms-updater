@@ -16,7 +16,7 @@ pub struct Communicator {
     user_id: String,
     /// Can be set per user in the admin section like above.
     user_token: String,
-    /// Used to make requests with, holds a pool of connections internally.
+    /// The JSON which defines a EgoCMS page has one section that is relevant to us. This path defines which section that is.
     client: Client,
 }
 

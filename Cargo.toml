@@ -10,6 +10,8 @@ serde = { version = "1.0.229", features = ["derive"] }
 csv = "1.4.0"
 toml = "1.1.4"
 anyhow = "1.0.104"
+markdown = "1.0.0"
+walkdir = "2.5.0"
 
 [lints.clippy]
 # Enable the pedantic group for the project.
