@@ -1,7 +1,7 @@
 # EgoCMS Updater Tool 🦀🔥🚀
 
-![CI](https://github.com/Jan-Frase/egocms-updater/blob/main/.github/workflows/checj.yml/badge.svg)
-![UPDATE](https://github.com/Jan-Frase/egocms-updater/blob/main/.github/workflows/checj.yml/update.svg)
+![Clippy-Formatting-Building](https://github.com/Jan-Frase/egocms-updater/actions/workflows/check.yml/badge.svg)
+![Update](https://github.com/Jan-Frase/egocms-updater/actions/workflows/update.yml/badge.svg)
 
 A Rust-based tool for synchronizing Markdown files with EgoCMS pages.
 

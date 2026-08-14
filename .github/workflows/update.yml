@@ -1,4 +1,4 @@
-name: Update
+name: Update-Pages
 on: [ push, pull_request ]
 
 jobs:
