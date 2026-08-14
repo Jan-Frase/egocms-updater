@@ -71,9 +71,9 @@ fn main() -> anyhow::Result<()> {
         args.user_token,
         &config.is_test_environment,
     )
-    .context(
-        "Failed to open a connection to the EgoCMS REST API. Are the user_id and user_token valid?",
-    )?;
+        .context(
+            "Failed to open a connection to the EgoCMS REST API. Are the user_id and user_token valid?",
+        )?;
 
     println!("=> Success.");
     println!();
@@ -86,7 +86,9 @@ fn main() -> anyhow::Result<()> {
         .context("The current configuration is incorrect!")?;
 
     println!();
+    println!("==========================");
     println!("3. Updating Pages:");
+    println!("==========================");
     // For each tracked page...
     for line in mappings {
         print!("=> The page: {} <-> {}", line.page_id, line.markdown_name);
@@ -190,7 +192,7 @@ fn check_table_and_config_correctness(
     communicator: &Communicator,
 ) -> anyhow::Result<()> {
     // 1. are all ids and names in the table unique?
-    println!("=> Are all IDs and names unique?");
+    print!("Are all IDs and names unique? ");
     let mut table_ids = HashSet::new();
     let mut table_md_names = HashSet::new();
     let duplicate_ids: Vec<&PageToFileMapping> = mappings
@@ -207,7 +209,7 @@ fn check_table_and_config_correctness(
             "The table contains duplicate entries! Duplicate-IDs: [{duplicate_ids:?}], Duplicate-Names: [{duplicate_names:?}]"
         );
     }
-    println!("==> Success.");
+    println!("=> Success.");
 
     // Get the relative path of all files in the directory.
     let mut md_file_names = Vec::new();
@@ -225,7 +227,7 @@ fn check_table_and_config_correctness(
     }
 
     // 2. are all files in the dir .md
-    println!("=> Does the markdown dir only contain files ending on `.md`?");
+    print!("Does the markdown dir only contain files ending on `.md`?");
     let incorrect_names: Vec<_> = md_file_names
         .iter()
         .filter(|name| {
@@ -239,10 +241,10 @@ fn check_table_and_config_correctness(
             markdown_dir.display(),
         );
     }
-    println!("==> Success.");
+    println!("=> Success.");
 
     // 3. are all .md in the dir listed in the table?
-    println!("=> Are all files in the pages dir listed in the mapping table?");
+    print!("Are all files in the pages dir listed in the mapping table? ");
     let missing_table_entries: Vec<_> = md_file_names
         .iter()
         .filter(|name| !table_md_names.contains(name.as_str()))
@@ -250,10 +252,10 @@ fn check_table_and_config_correctness(
     if !missing_table_entries.is_empty() {
         bail!("The files [{missing_table_entries:?}] are not listed in the mapping table!");
     }
-    println!("==> Success.");
+    println!("=> Success.");
 
     // 4. do all mds in the table exist?
-    println!("=> Do all .mds listed in the table exist?");
+    print!("Do all .mds listed in the table exist? ");
     let missing_markdown_files: Vec<_> = table_md_names
         .iter()
         .filter(|md_name| !md_file_names.contains(md_name))
@@ -264,10 +266,10 @@ fn check_table_and_config_correctness(
             markdown_dir.display()
         );
     }
-    println!("==> Success.");
+    println!("=> Success.");
 
     // 5. do all ids in the table exist?
-    println!("=> Do all IDs in the table exist?");
+    print!("Do all IDs in the table exist? ");
     let mut missing_ids = Vec::new();
     for id in &table_ids {
         let page = communicator
@@ -286,7 +288,7 @@ fn check_table_and_config_correctness(
     if !missing_ids.is_empty() {
         bail!("The IDs [{missing_ids:?} are listed in the table but do not exist.]");
     }
-    println!("==> Success.");
+    println!("=> Success.");
 
     Ok(())
 }
