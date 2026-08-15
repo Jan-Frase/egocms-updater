@@ -192,7 +192,7 @@ fn check_table_and_config_correctness(
     communicator: &Communicator,
 ) -> anyhow::Result<()> {
     // 1. are all ids and names in the table unique?
-    print!("Are all IDs and names unique? ");
+    print!("2.1. Are all IDs and names unique? ");
     let mut table_ids = HashSet::new();
     let mut table_md_names = HashSet::new();
     let duplicate_ids: Vec<&PageToFileMapping> = mappings
@@ -227,12 +227,14 @@ fn check_table_and_config_correctness(
     }
 
     // 2. are all files in the dir .md
-    print!("Does the markdown dir only contain files ending on `.md`?");
+    print!("2.2: Does the markdown dir only contain files ending on `.md`?");
     let incorrect_names: Vec<_> = md_file_names
         .iter()
         .filter(|name| {
             let name = Path::new(name);
-            !name.extension().unwrap().eq_ignore_ascii_case("md")
+            name.extension()
+                .map(|ext| !ext.eq_ignore_ascii_case("md"))
+                .unwrap_or(true) // Treat files without extension as invalid
         })
         .collect();
     if !incorrect_names.is_empty() {
@@ -244,7 +246,7 @@ fn check_table_and_config_correctness(
     println!("=> Success.");
 
     // 3. are all .md in the dir listed in the table?
-    print!("Are all files in the pages dir listed in the mapping table? ");
+    print!("2.3: Are all files in the pages dir listed in the mapping table? ");
     let missing_table_entries: Vec<_> = md_file_names
         .iter()
         .filter(|name| !table_md_names.contains(name.as_str()))
@@ -255,7 +257,7 @@ fn check_table_and_config_correctness(
     println!("=> Success.");
 
     // 4. do all mds in the table exist?
-    print!("Do all .mds listed in the table exist? ");
+    print!("2.4: Do all .mds listed in the table exist? ");
     let missing_markdown_files: Vec<_> = table_md_names
         .iter()
         .filter(|md_name| !md_file_names.contains(md_name))
@@ -269,7 +271,7 @@ fn check_table_and_config_correctness(
     println!("=> Success.");
 
     // 5. do all ids in the table exist?
-    print!("Do all IDs in the table exist? ");
+    print!("2.5: Do all IDs in the table exist? ");
     let mut missing_ids = Vec::new();
     for id in &table_ids {
         let page = communicator
