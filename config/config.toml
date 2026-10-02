@@ -2,6 +2,7 @@
 # I figured it might be nice to have them collected here instead of scattered throughout the code.
 
 # ==== IMPORTANT ==== #
+# TODO: Automatically set this to true when the rest_url is localhost.
 # When this is true, invalid TSL certs will be accepted!
 # This is required for local EgoCMS instances but should NEVER be `true` in production!
 is_test_environment = "true"
@@ -10,8 +11,11 @@ is_test_environment = "true"
 # REST API base URL.
 rest_url = "https://localhost/rest/"
 
-# A single EgoCMS instance can have multiple sites. This defines which sites we are interested in.
+# A single EgoCMS instance can have multiple sites. This defines which site we are interested in.
 site_url = "materialkit/de/"
+
+# The home page file. It is assumed that this file already exists as an EgoCMS page and is properly mapped to it.
+home_page = "Home.md"
 
 # Path to the mapping table CSV.
 mapping_table = "./config/mapping_table.csv"

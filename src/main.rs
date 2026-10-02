@@ -2,17 +2,43 @@
 /// the path to the current binary (supplied by default), the path to the config.toml, the user_id, and the user_token.
 const EXPECTED_AMOUNT_OF_ARGUMENTS: usize = 4;
 
+// TODO:
+// In the works:
+// - Links via page_id
+// - automatically create new pages
+// - get rid of any unneeded unwrap
+
+// Planned:
+// - Media Files via Interface in EgoCMS
+// - Title is a separate entry
+// - Download EgoCMS pages into dirs and .md files, starting from the manually mapped Home.md
+
+// Ideal workflow:
+// Simply create the new .md file, it gets detected, created through the API and added to the table.
+
+// Code workflow:
+// 1. Download EgoCMS state (warn in case of conflicts but /pages/ holds ground truth?)
+// 2. Create any new pages
+// 3. Check for required updates
+
+// OPEN PROBLEMS:
+// 1. Pages have a title and a name (for url stuff)
+// This is useful for pages like name: CoSEMoS and title: Coupled Storage System for Efficient Management of Self-Describing Data Formats (CoSEMoS)
+// How should I deal with this? Idea: name -> file name Title -> first line in md?
+
 pub mod communicator;
 mod page;
+mod new_page_creator;
 
 use crate::page::{Page, PageToFileMapping};
 use anyhow::{Context, bail};
 use communicator::Communicator;
 use csv::Reader;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashSet;
 use std::fs::File;
+use std::iter::zip;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 use walkdir::WalkDir;
@@ -25,16 +51,18 @@ struct Args {
 }
 
 /// Just a small struct that allows serde to parse the config.toml :)
-/// All fields here are futher documented in the config.toml file.
+/// All fields here are further documented in the config.toml file.
 #[derive(Deserialize)]
 struct Config {
     is_test_environment: String,
     rest_url: String,
     site_url: String,
+    home_page: String,
     mapping_table: PathBuf,
     markdown_dir: PathBuf,
     json_content_path: String,
 }
+
 
 fn main() -> anyhow::Result<()> {
     println!("==========================");
@@ -59,35 +87,45 @@ fn main() -> anyhow::Result<()> {
         "Failed to open the CSV table! It was expected to be at {}!",
         config.mapping_table.display()
     ))?;
+    // Get the current mapping_table.csv
+    let mut mappings: Vec<PageToFileMapping> = csv.deserialize().collect::<Result<Vec<_>, _>>()?;
+    drop(csv);
 
     println!("=> Success.");
     print!("1.4. Connecting to EgoCMS: ");
 
     // 1.4 Open a connection to EgoCMS's REST API.
     let communicator = open_connection(
-        config.rest_url,
-        config.site_url,
+        config.rest_url.clone(),
+        config.site_url.clone(),
         args.user_id,
         args.user_token,
         &config.is_test_environment,
     )
-    .context(
-        "Failed to open a connection to the EgoCMS REST API. Are the user_id and user_token valid?",
-    )?;
+        .context(
+            "Failed to open a connection to the EgoCMS REST API. Are the user_id and user_token valid?",
+        )?;
 
     println!("=> Success.");
     println!();
     println!("==========================");
-    println!("2. Checking Mapping Table For Correctness:");
+    println!("2. Creating New Pages:");
     println!("==========================");
 
-    let mappings: Vec<PageToFileMapping> = csv.deserialize().collect::<Result<Vec<_>, _>>()?;
-    check_table_and_config_correctness(&mappings, &config.markdown_dir, &communicator)
-        .context("The current configuration is incorrect!")?;
+    new_page_creator::create_new_pages(&mut mappings, &config, &communicator)?;
+
+    println!("=> Success.");
+    println!();
+    println!("==========================");
+    println!("3. Checking Mapping Table For Correctness:");
+    println!("==========================");
+
+    // check_table_and_config_correctness(&mappings, &config.markdown_dir, &communicator)
+    //    .context("The current configuration is incorrect!")?;
 
     println!();
     println!("==========================");
-    println!("3. Updating Pages:");
+    println!("4. Updating Pages:");
     println!("==========================");
     // For each tracked page...
     for line in mappings {
@@ -275,15 +313,11 @@ fn check_table_and_config_correctness(
     let mut missing_ids = Vec::new();
     for id in &table_ids {
         let page = communicator
-            .get_page(id.as_str())
+            .get_extra(id.as_str())
             .with_context(|| format!("Failed to fetch page for ID: {id}"))?;
 
-        let json: Value = page
-            .json()
-            .with_context(|| format!("Failed to parse JSON response for ID: {id}"))?;
-
         // The API returns JSON `null` for non-existent pages.
-        if json.is_null() {
+        if page.is_null() {
             missing_ids.push(id);
         }
     }

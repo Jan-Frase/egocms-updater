@@ -1,4 +1,5 @@
 use reqwest::blocking::{Client, Response};
+use serde::Serialize;
 use serde_json::Value;
 
 /// This struct takes care of communications with the EgoCMS.
@@ -16,8 +17,18 @@ pub struct Communicator {
     user_id: String,
     /// Can be set per user in the admin section like above.
     user_token: String,
-    /// The JSON which defines a EgoCMS page has one section that is relevant to us. This path defines which section that is.
+    /// The JSON, which defines an EgoCMS page, has one section that is relevant to us. This path defines which section that is.
     client: Client,
+}
+
+#[derive(Serialize)]
+struct NewChildParameters {
+    name: String,
+    title: String,
+    #[serde(rename = "type")]
+    site_type: String,
+    inactive: u64,
+    nav_hide: u64,
 }
 
 // Automatically close the connection when the Communicator gets dropped.
@@ -25,7 +36,7 @@ impl Drop for Communicator {
     fn drop(&mut self) {
         // At this point we don't have a clean way of handling potential errors.
         // An alternative would be to have users of this struct call the close manually.
-        // However, I think this convenience is worth the slight suboptimal error handling.
+        // However, I think this convenience is worth the slightly suboptimal error handling.
         let result = self.close_session();
 
         match result {
@@ -81,6 +92,42 @@ impl Communicator {
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~
     // PUT Functions
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~
+    /// Creates a new child-page.
+    /// https://hilfe.egocms.com/entwicklung/klassen-_-funktionen/page/newchild
+    /// * `id` - The id of the parent.
+    /// * `title` - Shown on the page.
+    /// * `parent_extra` - The extra of the parent, will be copied.
+    pub fn new_child(&self, parent_id: &str, title: &str) -> anyhow::Result<Response> {
+        let new_child_url = format!("{}{}{}{}", self.rest_url, self.site_url, parent_id, "/newChild");
+
+        // Get the parents extra.
+        let parent_extra: Value = self.get_extra(parent_id)?;
+
+        // Generate the parameters.
+        let new_child_parameters = NewChildParameters {
+            name: title.to_string(),
+            title: title.to_string(),
+            site_type: "blog/entry".to_string(),
+            inactive: 0,
+            nav_hide: 0,
+        };
+        let json = serde_json::to_value(&new_child_parameters)?;
+
+        let mut wrapped_json = serde_json::Map::new();
+        wrapped_json.insert("field".into(), json);
+        // I copy the extra of the parent to avoid the new child lacking some entries I expect later on when pushing the .md to the page.
+        wrapped_json.insert("extra".into(), parent_extra);
+
+        let result = self
+            .client
+            .post(new_child_url)
+            .json(&wrapped_json)
+            .send()?
+            .error_for_status()?;
+
+        Ok(result)
+    }
+
     /// This fully replaces the contents of the extra part of the page!
     /// It should thus be used by first getting `extra` modifying it, and then updating :)
     /// https://hilfe.egocms.com/entwicklung/klassen-_-funktionen/page/updateextra
@@ -102,17 +149,25 @@ impl Communicator {
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~
     /// This needs a page id to get a page's information, like it content etc.
     /// https://hilfe.egocms.com/entwicklung/klassen-_-funktionen/site/getpage
-    pub fn get_page(&self, id: &str) -> anyhow::Result<Response> {
+    pub fn get_extra(&self, id: &str) -> anyhow::Result<Value> {
         let get_extra_url = format!("{}{}{}", self.rest_url, self.site_url, "getPage");
         let params = vec![("id", id)];
 
-        let result = self
+        let mut result: Value = self
             .client
             .get(get_extra_url)
             .query(&params)
             .send()?
-            .error_for_status()?;
-        Ok(result)
+            .error_for_status()?
+            .json()?;
+
+        // We are only interested in the `extra` section.
+        let extra = result
+            .as_object_mut()
+            .and_then(|obj| obj.remove("extra"))
+            .ok_or_else(|| anyhow::anyhow!("Missing 'extra' key!"))?;
+
+        Ok(extra)
     }
 }
 

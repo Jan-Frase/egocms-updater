@@ -1,9 +1,18 @@
 use crate::communicator::Communicator;
 use anyhow::bail;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::fs;
 use std::path::Path;
+
+/// A simple tuple representing a mapping between EgoCMS page and markdown file.
+/// The `page_id` could, for example, be "535".
+/// The `markdown_name` could, for example, be "Research/JULEA.md".
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PageToFileMapping {
+    pub page_id: String,
+    pub markdown_name: String,
+}
 
 /// This struct represents a single page.
 /// It holds the mapping (ie the id and the markdown name), the `extra` section of the pages json and the markdown on disk converted to html.
@@ -17,15 +26,6 @@ pub struct Page {
     html: String,
 }
 
-/// A simple tuple representing a mapping between EgoCMS page and markdown file.
-/// The `page_id` could, for example, be "535".
-/// The `markdown_name` could, for example, be "research/julea.md".
-#[derive(Debug, Deserialize)]
-pub struct PageToFileMapping {
-    pub page_id: String,
-    pub markdown_name: String,
-}
-
 impl Page {
     /// Simple constructor for a page :)
     pub fn new(
@@ -34,15 +34,8 @@ impl Page {
         path_to_markdown: &Path,
     ) -> anyhow::Result<Self> {
         // 1. Get the json from the website.
-        let mut page_json = communicator
-            .get_page(mapping.page_id.as_str())?
-            .json::<Value>()?;
-
-        // We are only interested in the `extra` section.
-        let extra = page_json
-            .as_object_mut()
-            .and_then(|obj| obj.remove("extra"))
-            .ok_or_else(|| anyhow::anyhow!("Missing 'extra' key!"))?;
+        let extra = communicator
+            .get_extra(mapping.page_id.as_str())?;
 
         // 2. Create the full markdown path, read it from disk and parse it to html.
         let md_path = path_to_markdown.join(&mapping.markdown_name);
