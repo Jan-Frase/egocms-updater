@@ -18,16 +18,8 @@ mod initalization;
 mod new_page_creation;
 mod page;
 
-use crate::page::{Page, PageToFileMapping};
-use anyhow::{Context, bail};
-use api_communication::Communicator;
-use csv::Reader;
 use serde::Deserialize;
-use std::collections::HashSet;
-use std::fs::File;
-use std::path::{Path, PathBuf};
-use std::{env, fs};
-use walkdir::WalkDir;
+use std::path::PathBuf;
 
 /// Path to the mapping table CSV.
 const MAPPING_TABLE_PATH: &str = "./config/mapping_table.csv";
@@ -77,7 +69,7 @@ fn main() -> anyhow::Result<()> {
     println!("4. Updating Pages:");
     println!("==========================");
     // For each tracked page...
-    for mut page in pages {
+    for page in pages {
         print!(
             "=> The page: {:?} <-> {}",
             page.mapping.page_id, page.mapping.markdown_name

@@ -103,7 +103,7 @@ fn parse_arguments() -> anyhow::Result<Args> {
 }
 
 /// Gathers all paths of .md files that haven't yet been pushed to the CMS.
-fn get_new_md_files(pages: &Vec<Page>) -> anyhow::Result<Vec<String>> {
+fn get_new_md_files(pages: &[Page]) -> anyhow::Result<Vec<String>> {
     // Get all files in the markdown dir.
     let mut new_file_paths: Vec<String> = Vec::new();
     for entry in WalkDir::new(MARKDOWN_DIR) {
@@ -130,7 +130,7 @@ fn get_new_md_files(pages: &Vec<Page>) -> anyhow::Result<Vec<String>> {
 
 /// This function does a bunch of sanity checks to avoid silly mistakes.
 /// It did get rather long, but oh well.
-fn check_table_and_config_correctness(
+fn _check_table_and_config_correctness(
     mappings: &[PageToFileMapping],
     markdown_dir: &PathBuf,
     communicator: &Communicator,
@@ -177,8 +177,7 @@ fn check_table_and_config_correctness(
         .filter(|name| {
             let name = Path::new(name);
             name.extension()
-                .map(|ext| !ext.eq_ignore_ascii_case("md"))
-                .unwrap_or(true) // Treat files without extension as invalid
+                .is_none_or(|ext| !ext.eq_ignore_ascii_case("md")) // Treat files without extension as invalid
         })
         .collect();
     if !incorrect_names.is_empty() {

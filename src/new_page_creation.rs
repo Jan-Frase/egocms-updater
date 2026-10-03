@@ -17,7 +17,7 @@ struct NewPageField {
 /// Creates an EgoCMS page for every `Page` that has no `page_id` yet,
 /// stores the returned id in the page's mapping, and rewrites the mapping table.
 pub fn push_new_pages(
-    pages: &mut Vec<Page>,
+    pages: &mut [Page],
     config: &Config,
     communicator: &Communicator,
 ) -> anyhow::Result<()> {
@@ -102,12 +102,17 @@ fn get_parent(config: &Config, markdown_name: &str) -> anyhow::Result<String> {
         // Cases 2 and 3: the file is the "index" of its directory.
         Some(&last) if last == stem => {
             sections.pop();
-            match sections.last() {
-                Some(grandpa) => format!("{}/{grandpa}/{grandpa}.md", sections[..sections.len() - 1].join("/"))
+            sections.last().map_or_else(
+                || config.home_page.clone(),
+                |grandpa| {
+                    format!(
+                        "{}/{grandpa}/{grandpa}.md",
+                        sections[..sections.len() - 1].join("/")
+                    )
                     .trim_start_matches('/')
-                    .to_string(),
-                None => config.home_page.clone(),
-            }
+                    .to_string()
+                },
+            )
         }
         // Case 1: the parent is the index of the containing directory.
         Some(&last) => format!("{}/{last}.md", sections.join("/")),

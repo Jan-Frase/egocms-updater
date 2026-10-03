@@ -36,7 +36,7 @@ impl Page {
         let file = fs::read_to_string(md_path)?;
         // Extract the title.
         let mut lines = file.lines();
-        let title = lines.by_ref().take(1).next().expect(&format!("The file: {} is empty but is expected to have at least one line to serve as the title.", mapping.markdown_name));
+        let title = lines.by_ref().take(1).next().unwrap_or_else(|| panic!("The file: {} is empty but is expected to have at least one line to serve as the title.", mapping.markdown_name));
         let title = title.strip_prefix("# ").unwrap_or(title).to_string();
 
         let markdown = lines.skip(1).join("\n");
@@ -54,7 +54,7 @@ impl Page {
 
     /// Executes the actual updating of the EgoCMS page.
     pub fn update(
-        &mut self,
+        &self,
         communicator: &Communicator,
         json_content_path: &str,
     ) -> anyhow::Result<()> {
@@ -90,7 +90,7 @@ impl Page {
         let online_content = extra
             .pointer(json_content_path)
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!(format!("The extra section of the pages json: {} does not contain the path: {json_content_path}!", extra)))?;
+            .ok_or_else(|| anyhow::anyhow!(format!("The extra section of the pages json: {extra} does not contain the path: {json_content_path}!")))?;
 
         // Are they the same?
         Ok(online_content == self.html)
