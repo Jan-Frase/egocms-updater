@@ -97,15 +97,18 @@ impl Communicator {
     /// * `id` - The id of the parent.
     /// * `title` - Shown on the page.
     /// * `parent_extra` - The extra of the parent, will be copied.
-    pub fn new_child(&self, parent_id: &str, title: &str) -> anyhow::Result<Response> {
-        let new_child_url = format!("{}{}{}{}", self.rest_url, self.site_url, parent_id, "/newChild");
+    pub fn new_child(&self, parent_id: &str, name: &str, title: &str) -> anyhow::Result<Response> {
+        let new_child_url = format!(
+            "{}{}{}{}",
+            self.rest_url, self.site_url, parent_id, "/newChild"
+        );
 
         // Get the parents extra.
         let parent_extra: Value = self.get_extra(parent_id)?;
 
         // Generate the parameters.
         let new_child_parameters = NewChildParameters {
-            name: title.to_string(),
+            name: name.to_string(),
             title: title.to_string(),
             site_type: "blog/entry".to_string(),
             inactive: 0,
