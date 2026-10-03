@@ -5,8 +5,7 @@
 
 // Planned:
 // - Media Files via Interface in EgoCMS
-// - Title is a separate entry
-// - Download EgoCMS pages into dirs and .md files, starting from the manually mapped Home.md
+// - Download EgoCMS pages into dirs and .md files
 // - Ensure that when updating an existing site, the title and names are updated as well.
 
 // Done:
@@ -14,7 +13,7 @@
 // -> the name of the new page is derived from the file name, the title is the first line in the md
 
 pub mod api_communication;
-mod initalization;
+mod initialization;
 mod new_page_creation;
 mod page;
 
@@ -45,38 +44,21 @@ struct Config {
 }
 
 fn main() -> anyhow::Result<()> {
-    let (mut pages, communicator, config) = initalization::init()?;
+    print_stage("1. Initialize resources");
+    let (mut pages, communicator, config) = initialization::init()?;
 
-    println!("=> Success.");
-    println!();
-    println!("==========================");
-    println!("2. Creating New Pages:");
-    println!("==========================");
-
+    print_stage("2. Create new pages");
     new_page_creation::push_new_pages(&mut pages, &config, &communicator)?;
 
-    println!("=> Success.");
-    println!();
-    println!("==========================");
-    println!("3. Checking Mapping Table For Correctness:");
-    println!("==========================");
-
-    // check_table_and_config_correctness(&mappings, &config.markdown_dir, &communicator)
-    //    .context("The current configuration is incorrect!")?;
-
-    println!();
-    println!("==========================");
-    println!("4. Updating Pages:");
-    println!("==========================");
+    print_stage("3. Update pages");
     // For each tracked page...
     for page in pages {
-        print!(
-            "=> The page: {:?} <-> {}",
-            page.mapping.page_id, page.mapping.markdown_name
-        );
         // ... update it, if required.
         page.update(&communicator, &config.json_content_path)?;
     }
-    println!("Success. Bye :)");
     Ok(())
+}
+
+fn print_stage(title: &str) {
+    println!("{}.", title);
 }
