@@ -76,6 +76,8 @@ impl Communicator {
 
         let client = client.cookie_store(true).build()?;
 
+        Self::start_session(&rest_url, &user_id, &user_token, &client)?;
+
         let communicator = Self {
             rest_url,
             site_url,
@@ -83,8 +85,6 @@ impl Communicator {
             user_token,
             client,
         };
-
-        communicator.start_session()?;
 
         Ok(communicator)
     }
@@ -182,15 +182,14 @@ impl Communicator {
     /// The request then returns a session cookie which we need to send together with all future requests.
     /// The session cookie is automatically stored and appended by the client.
     /// https://hilfe.egocms.com/entwicklung/json_rest-api/erste-schritte
-    fn start_session(&self) -> anyhow::Result<Response> {
-        let start_session_url = format!("{}{}", self.rest_url, "startSession");
+    fn start_session(rest_url: &str, user_id: &str, user_token: &str, client: &Client) -> anyhow::Result<Response> {
+        let start_session_url = format!("{}{}", rest_url, "startSession");
         let params = vec![
-            ("user_id", self.user_id.as_str()),
-            ("token", self.user_token.as_str()),
+            ("user_id", user_id),
+            ("token", user_token),
         ];
 
-        let result = self
-            .client
+        let result = client
             .put(start_session_url)
             .query(&params)
             .send()?

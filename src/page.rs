@@ -1,13 +1,14 @@
-use crate::MARKDOWN_DIR;
-use crate::api_communication::Communicator;
+use crate::communicator::Communicator;
 use anyhow::bail;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::fs;
 use std::path::Path;
+use crate::config::MARKDOWN_DIR;
 
-/// A simple tuple representing a mapping between EgoCMS page and markdown file.
+/// A simple tuple representing a mapping between EgoCMS page and a markdown file.
+/// Useful for reading and writing the csv file :)
 /// The `page_id` could, for example, be "535".
 /// The `markdown_name` could, for example, be "Research/JULEA.md".
 #[derive(Debug, Deserialize, Serialize)]
@@ -39,7 +40,7 @@ impl Page {
         let title = lines.by_ref().take(1).next().unwrap_or_else(|| panic!("The file: {} is empty but is expected to have at least one line to serve as the title.", mapping.markdown_name));
         let title = title.strip_prefix("# ").unwrap_or(title).to_string();
 
-        let markdown = lines.skip(1).join("\n");
+        let markdown = lines.join("\n");
         let html = markdown::to_html(&markdown);
 
         // 2. Done :)

@@ -1,8 +1,8 @@
-use crate::api_communication::Communicator;
+use crate::communicator::Communicator;
 use crate::page::Page;
-use crate::{Config, MAPPING_TABLE_PATH};
 use anyhow::{Context, bail};
 use serde::Deserialize;
+use crate::config::{Config, MAPPING_TABLE_PATH};
 
 #[derive(Deserialize)]
 struct NewPageResponse {
@@ -21,6 +21,11 @@ pub fn push_new_pages(
     config: &Config,
     communicator: &Communicator,
 ) -> anyhow::Result<()> {
+
+    // Write the new mapping table to disk.
+    let mut wtr = csv::WriterBuilder::new()
+        .comment(Some(b'#'))
+        .from_path(MAPPING_TABLE_PATH)?;
     // A page can only be created once its parent has an id. Instead of sorting by the parent tree,
     // we keep looping over the unmapped pages until a full pass creates nothing new.
     loop {
@@ -53,6 +58,8 @@ pub fn push_new_pages(
             );
             pages[index].mapping.page_id = Some(new_id);
             created_any = true;
+            // Write the change to the csv file.
+            wtr.serialize(&pages[index].mapping)?;
         }
 
         if !unmapped_left {
@@ -70,16 +77,7 @@ pub fn push_new_pages(
         }
     }
 
-    // Write the new mapping table to disk.
-    let mut wtr = csv::WriterBuilder::new()
-        .comment(Some(b'#'))
-        .from_path(MAPPING_TABLE_PATH)?;
-    for page in pages.iter() {
-        wtr.serialize(&page.mapping)?;
-    }
-    wtr.flush()?;
 
-    // TODO: Add commit to the action.
     Ok(())
 }
 
@@ -109,8 +107,8 @@ fn get_parent(config: &Config, markdown_name: &str) -> anyhow::Result<String> {
                         "{}/{grandpa}/{grandpa}.md",
                         sections[..sections.len() - 1].join("/")
                     )
-                    .trim_start_matches('/')
-                    .to_string()
+                        .trim_start_matches('/')
+                        .to_string()
                 },
             )
         }
