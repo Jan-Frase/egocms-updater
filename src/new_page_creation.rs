@@ -32,6 +32,10 @@ pub fn push_new_pages(
     let mut wtr = csv::WriterBuilder::new()
         .comment(Some(b'#'))
         .from_path(MAPPING_TABLE_PATH)?;
+    for page in &pushed_pages {
+        wtr.serialize(PageToFileMapping { page_id: page.page_id, markdown_name: page.content.markdown_name.clone() })?;
+    }
+    wtr.flush()?;
     // A page can only be created once its parent has an id. Instead of sorting by the parent tree,
     // we keep looping over the unmapped pages until a full pass creates nothing new.
     while !pending_pages.is_empty() {
@@ -112,8 +116,8 @@ fn get_parent_name(config: &Config, markdown_name: &str) -> anyhow::Result<Strin
                         "{}/{grandpa}/{grandpa}.md",
                         sections[..sections.len() - 1].join("/")
                     )
-                    .trim_start_matches('/')
-                    .to_string()
+                        .trim_start_matches('/')
+                        .to_string()
                 },
             )
         }

@@ -96,6 +96,8 @@ impl MappedPage {
 
         // Send the updated and wrapped JSON to EgoCMS.
         communicator.update_extra(self.page_id, &wrapped_extra.into())?;
+
+        println!("Updated: {}", self.content.markdown_name);
         Ok(())
     }
 
