@@ -1,11 +1,11 @@
 use crate::communicator::Communicator;
+use crate::config::MARKDOWN_DIR;
 use anyhow::bail;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::fs;
 use std::path::Path;
-use crate::config::MARKDOWN_DIR;
 
 /// A simple tuple representing a mapping between EgoCMS page and a markdown file.
 /// Useful for reading and writing the csv file :)
@@ -13,44 +13,64 @@ use crate::config::MARKDOWN_DIR;
 /// The `markdown_name` could, for example, be "Research/JULEA.md".
 #[derive(Debug, Deserialize, Serialize)]
 pub struct PageToFileMapping {
-    pub page_id: Option<String>,
+    pub page_id: u64,
     pub markdown_name: String,
 }
 
-/// This struct represents a single page.
-/// It holds the mapping (i.e., the id and the markdown name), the `extra` section of the pages json and the markdown on disk converted to html.
+/// This struct represents a markdown file.
+/// It is not yet connected to a CMS page.
 #[derive(Debug)]
-pub struct Page {
-    /// Defines which id and markdown file are relevant to this page struct.
-    pub mapping: PageToFileMapping,
+pub struct PageContent {
+    pub markdown_name: String,
     /// The relevant markdown file converted to HTML.
     html: String,
     /// The title shown at the top of the page, extracted from the first line in the .md file.
     pub title: String,
 }
 
-impl Page {
+impl PageContent {
     /// Simple constructor for a page :)
-    pub fn new(mapping: PageToFileMapping) -> anyhow::Result<Self> {
+    pub fn new(markdown_path: &str) -> anyhow::Result<Self> {
         // 1. Create the full markdown path, read it from disk and parse it to html.
-        let md_path = Path::new(MARKDOWN_DIR).join(&mapping.markdown_name);
-        let file = fs::read_to_string(md_path)?;
-        // Extract the title.
-        let mut lines = file.lines();
-        let title = lines.by_ref().take(1).next().unwrap_or_else(|| panic!("The file: {} is empty but is expected to have at least one line to serve as the title.", mapping.markdown_name));
-        let title = title.strip_prefix("# ").unwrap_or(title).to_string();
+        let file = fs::read_to_string(Path::new(MARKDOWN_DIR).join(markdown_path))?;
 
-        let markdown = lines.join("\n");
-        let html = markdown::to_html(&markdown);
+        // 2. Extract the title.
+        let mut lines = file.lines();
+        let title = lines.by_ref().take(1).next().unwrap_or_else(|| panic!("The file: {markdown_path} is empty but is expected to have at least one line to serve as the title."));
+        let title = title.strip_prefix("# ").unwrap_or(title).to_string();
+        // Join the remaining lines and convert them to html.
+        let html = markdown::to_html(&lines.join("\n"));
 
         // 2. Done :)
+        let markdown_path = markdown_path.to_string();
         let page = Self {
-            mapping,
+            markdown_name: markdown_path,
             html,
             title,
         };
 
         Ok(page)
+    }
+}
+
+/// This struct represents a markdown file mapped to a CMS page.
+/// Works through composition.
+#[derive(Debug)]
+pub struct MappedPage {
+    pub page_id: u64,
+    pub content: PageContent,
+}
+
+impl MappedPage {
+    pub const fn new(content: PageContent, page_id: u64) -> Self {
+        Self { page_id, content }
+    }
+
+    pub fn new_from_mapping(mapping: &PageToFileMapping) -> anyhow::Result<Self> {
+        let content = PageContent::new(mapping.markdown_name.as_str())?;
+        let page_id = mapping.page_id;
+
+        Ok(Self { page_id, content })
     }
 
     /// Executes the actual updating of the EgoCMS page.
@@ -59,11 +79,7 @@ impl Page {
         communicator: &Communicator,
         json_content_path: &str,
     ) -> anyhow::Result<()> {
-        let page_id = match &self.mapping.page_id {
-            None => bail!("Attempted to update a page without an EgoCMS ID."),
-            Some(id) => id.as_str(),
-        };
-        let mut extra = communicator.get_extra(page_id)?;
+        let mut extra = communicator.get_extra(self.page_id)?;
 
         if self.is_up_to_date(&extra, json_content_path)? {
             return Ok(());
@@ -71,7 +87,7 @@ impl Page {
         // Update the extra JSON.
         match extra.pointer_mut(json_content_path) {
             None => bail!("Missing or invalid content field."),
-            Some(content) => *content = self.html.clone().into(),
+            Some(content) => *content = self.content.html.clone().into(),
         }
 
         // Wrap it like this: { extra: $old_extra$ }
@@ -79,7 +95,7 @@ impl Page {
         wrapped_extra.insert("extra".into(), extra.take());
 
         // Send the updated and wrapped JSON to EgoCMS.
-        communicator.update_extra(page_id, &wrapped_extra.into())?;
+        communicator.update_extra(self.page_id, &wrapped_extra.into())?;
         Ok(())
     }
 
@@ -94,6 +110,6 @@ impl Page {
             .ok_or_else(|| anyhow::anyhow!(format!("The extra section of the pages json: {extra} does not contain the path: {json_content_path}!")))?;
 
         // Are they the same?
-        Ok(online_content == self.html)
+        Ok(online_content == self.content.html)
     }
 }

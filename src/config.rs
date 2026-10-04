@@ -1,7 +1,7 @@
-use std::env;
-use std::path::PathBuf;
 use anyhow::bail;
 use serde::Deserialize;
+use std::env;
+use std::path::PathBuf;
 
 /// We require 4 parameters:
 /// the path to the current binary (supplied by default), the path to the config.toml, the user_id, and the user_token.

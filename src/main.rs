@@ -13,8 +13,8 @@
 // -> the name of the new page is derived from the file name, the title is the first line in the md
 
 use anyhow::Context;
-use auto_update_egocms::run;
 use auto_update_egocms::config::parse_arguments;
+use auto_update_egocms::run;
 
 fn main() -> anyhow::Result<()> {
     // Parse the command line arguments.
@@ -24,6 +24,3 @@ fn main() -> anyhow::Result<()> {
 
     Ok(())
 }
-
-
-

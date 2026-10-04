@@ -12,11 +12,6 @@ pub struct Communicator {
     /// So for this example the site_url should be "materialkit/de/".
     /// This approach fails when multiple languages are supposed to be updated, but that's fine for now.
     site_url: String,
-    /// The ID of the user who is authoring the requests. This id can be found in the admin section
-    /// of EgoCMS by checking: Verwaltung > Rollen > [Click on the username] > Bottom right corner.
-    user_id: String,
-    /// Can be set per user in the admin section like above.
-    user_token: String,
     /// The JSON, which defines an EgoCMS page, has one section that is relevant to us. This path defines which section that is.
     client: Client,
 }
@@ -55,8 +50,8 @@ impl Communicator {
     /// # Parameters
     /// - `rest_url`: The base URL for the REST API.
     /// - `site_url`: The base URL for the website or service.
-    /// - `user_id`: The user identifier for authentication purposes.
-    /// - `user_token`: The token used for authenticating the user's session.
+    /// - `user_id`:  The ID of the user who is authoring the requests. This id can be found in the admin section of EgoCMS by checking: Verwaltung > Rollen > [Click on the username] > Bottom right corner.
+    /// - `user_token`: The token used for authenticating the user's session. Can be set per user in the admin section like above.
     ///
     /// # Returns
     /// - `Ok(Communicator)` if the initialization is successful.
@@ -64,8 +59,8 @@ impl Communicator {
     pub fn new(
         rest_url: String,
         site_url: String,
-        user_id: String,
-        user_token: String,
+        user_id: &str,
+        user_token: &str,
         is_test_environment: bool,
     ) -> anyhow::Result<Self> {
         let mut client = Client::builder();
@@ -76,13 +71,11 @@ impl Communicator {
 
         let client = client.cookie_store(true).build()?;
 
-        Self::start_session(&rest_url, &user_id, &user_token, &client)?;
+        Self::start_session(&rest_url, user_id, user_token, &client)?;
 
         let communicator = Self {
             rest_url,
             site_url,
-            user_id,
-            user_token,
             client,
         };
 
@@ -97,7 +90,7 @@ impl Communicator {
     /// * `id` - The id of the parent.
     /// * `title` - Shown on the page.
     /// * `parent_extra` - The extra of the parent, will be copied.
-    pub fn new_child(&self, parent_id: &str, name: &str, title: &str) -> anyhow::Result<Response> {
+    pub fn new_child(&self, parent_id: u64, name: &str, title: &str) -> anyhow::Result<Response> {
         let new_child_url = format!(
             "{}{}{}{}",
             self.rest_url, self.site_url, parent_id, "/newChild"
@@ -134,7 +127,7 @@ impl Communicator {
     /// This fully replaces the contents of the extra part of the page!
     /// It should thus be used by first getting `extra` modifying it, and then updating :)
     /// https://hilfe.egocms.com/entwicklung/klassen-_-funktionen/page/updateextra
-    pub fn update_extra(&self, id: &str, new_extra: &Value) -> anyhow::Result<Response> {
+    pub fn update_extra(&self, id: u64, new_extra: &Value) -> anyhow::Result<Response> {
         let update_extra_url =
             format!("{}{}{}{}", self.rest_url, self.site_url, id, "/updateExtra");
 
@@ -152,7 +145,7 @@ impl Communicator {
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~
     /// This needs a page id to get a page's information, like it content etc.
     /// https://hilfe.egocms.com/entwicklung/klassen-_-funktionen/site/getpage
-    pub fn get_extra(&self, id: &str) -> anyhow::Result<Value> {
+    pub fn get_extra(&self, id: u64) -> anyhow::Result<Value> {
         let get_extra_url = format!("{}{}{}", self.rest_url, self.site_url, "getPage");
         let params = vec![("id", id)];
 
@@ -182,12 +175,14 @@ impl Communicator {
     /// The request then returns a session cookie which we need to send together with all future requests.
     /// The session cookie is automatically stored and appended by the client.
     /// https://hilfe.egocms.com/entwicklung/json_rest-api/erste-schritte
-    fn start_session(rest_url: &str, user_id: &str, user_token: &str, client: &Client) -> anyhow::Result<Response> {
+    fn start_session(
+        rest_url: &str,
+        user_id: &str,
+        user_token: &str,
+        client: &Client,
+    ) -> anyhow::Result<Response> {
         let start_session_url = format!("{}{}", rest_url, "startSession");
-        let params = vec![
-            ("user_id", user_id),
-            ("token", user_token),
-        ];
+        let params = vec![("user_id", user_id), ("token", user_token)];
 
         let result = client
             .put(start_session_url)
