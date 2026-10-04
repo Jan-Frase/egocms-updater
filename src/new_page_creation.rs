@@ -33,7 +33,10 @@ pub fn push_new_pages(
         .comment(Some(b'#'))
         .from_path(MAPPING_TABLE_PATH)?;
     for page in &pushed_pages {
-        wtr.serialize(PageToFileMapping { page_id: page.page_id, markdown_name: page.content.markdown_name.clone() })?;
+        wtr.serialize(PageToFileMapping {
+            page_id: page.page_id,
+            markdown_name: page.content.markdown_name.clone(),
+        })?;
     }
     wtr.flush()?;
     // A page can only be created once its parent has an id. Instead of sorting by the parent tree,
@@ -83,7 +86,6 @@ pub fn push_new_pages(
             );
         }
 
-        // Swap the lists to please the borrow checker. I guess this could be more performant with unsafe rust.
         pending_pages = still_pending;
     }
 
@@ -116,8 +118,8 @@ fn get_parent_name(config: &Config, markdown_name: &str) -> anyhow::Result<Strin
                         "{}/{grandpa}/{grandpa}.md",
                         sections[..sections.len() - 1].join("/")
                     )
-                        .trim_start_matches('/')
-                        .to_string()
+                    .trim_start_matches('/')
+                    .to_string()
                 },
             )
         }

@@ -16,7 +16,7 @@ jobs:
         run: cargo fmt -- --check
 
       - name: Is Clippy happy?
-        run: cargo clippy
+        run: cargo clippy -- -D warnings
 
       - name: Build!
         run: cargo build
