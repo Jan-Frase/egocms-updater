@@ -1,6 +1,6 @@
 use crate::communicator::Communicator;
 use crate::config::MARKDOWN_DIR;
-use anyhow::bail;
+use anyhow::{Context, bail};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -36,7 +36,7 @@ impl PageContent {
 
         // 2. Extract the title.
         let mut lines = file.lines();
-        let title = lines.by_ref().take(1).next().unwrap_or_else(|| panic!("The file: {markdown_path} is empty but is expected to have at least one line to serve as the title."));
+        let title = lines.by_ref().take(1).next().context(format!("The file: {markdown_path} is empty but is expected to have at least one line to serve as the title."))?;
         let title = title.strip_prefix("# ").unwrap_or(title).to_string();
         // Join the remaining lines and convert them to html.
         let html = markdown::to_html(&lines.join("\n"));

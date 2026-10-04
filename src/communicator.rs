@@ -44,6 +44,7 @@ impl Drop for Communicator {
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Public Functions
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~
+// TODO: These functions return reqwest data types. It might be cleaner to parse the responses into structs or similar first.
 impl Communicator {
     /// Initializes a new `Communicator` instance.
     ///

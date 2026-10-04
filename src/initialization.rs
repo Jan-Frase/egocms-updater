@@ -1,6 +1,7 @@
 use crate::communicator::Communicator;
 use crate::config::{Config, Inputs, MAPPING_TABLE_PATH, MARKDOWN_DIR};
 use crate::page::{MappedPage, PageContent, PageToFileMapping};
+use std::collections::HashSet;
 use std::fs;
 use walkdir::WalkDir;
 
@@ -17,6 +18,11 @@ pub fn init(
 
     // 1.3 Open a connection to EgoCMS's REST API.
     let is_test_environment = config.rest_url.eq("https://localhost/rest/");
+    if is_test_environment {
+        eprintln!(
+            "WARNING: As the URL is localhost, this ia assumed to be a safe test enviornment. Invalid certificats will be accepted."
+        );
+    }
     let communicator = Communicator::new(
         config.rest_url.clone(),
         config.site_url.clone(),
@@ -51,7 +57,12 @@ pub fn init(
 }
 
 /// Gathers all paths of .md files that haven't yet been pushed to the CMS.
-fn get_new_md_files(pages: &[MappedPage]) -> anyhow::Result<Vec<String>> {
+fn get_new_md_files(pushed_pages: &[MappedPage]) -> anyhow::Result<Vec<String>> {
+    // HashSet containing all names of already mapped pages.
+    let pages: HashSet<_> = pushed_pages
+        .iter()
+        .map(|page| page.content.markdown_name.clone())
+        .collect();
     // Get all files in the markdown dir.
     let mut new_file_paths: Vec<String> = Vec::new();
     for entry in WalkDir::new(MARKDOWN_DIR) {
@@ -59,19 +70,13 @@ fn get_new_md_files(pages: &[MappedPage]) -> anyhow::Result<Vec<String>> {
         if !entry.file_type().is_file() {
             continue;
         }
-        let path = entry.path().to_string_lossy().to_string();
+        let path = entry.path().display().to_string();
         // This unwrapping has to be safe because WalkDir always appends the config.markdown to the path.
         let path = path.strip_prefix(MARKDOWN_DIR).unwrap();
         new_file_paths.push(path.parse()?);
     }
 
     // Only retain the files that are not in the mapping table yet, i.e.: all files that are new.
-    new_file_paths.retain(|path| {
-        pages
-            .iter()
-            .filter(|page| page.content.markdown_name.eq(path))
-            .count()
-            == 0
-    });
+    new_file_paths.retain(|path| !pages.contains(path));
     Ok(new_file_paths)
 }
