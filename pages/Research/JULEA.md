@@ -7,7 +7,5 @@ dynamically adapting the I/O operations' semantics and can thus be adjusted to d
 in user space, which eases development and debugging.
 
 It is open source and can be found on [GitHub](https://github.com/julea-io). JULEA is used in teaching and students have
-contributed several major new
-features. Moreover, it serves as the foundation of the [CoSEMoS](https://www.parcio.ovgu.de/Research/CoSEMoS.html)
-project to explore the benefits of a coupled storage
-system for self-describing data formats.
+contributed several major new features. Moreover, it serves as the foundation of the [CoSEMoS](./CoSEMoS/CoSEMoS.md)
+project to explore the benefits of a coupled storage system for self-describing data formats.

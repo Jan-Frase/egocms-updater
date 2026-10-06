@@ -1,5 +1,5 @@
-use crate::communicator::Communicator;
-use crate::config::MARKDOWN_DIR;
+use crate::types::communicator::Communicator;
+use crate::types::config::MARKDOWN_DIR;
 use anyhow::{Context, bail};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -8,6 +8,7 @@ use std::fs;
 use std::path::Path;
 
 /// A simple tuple representing a mapping between EgoCMS page and a markdown file.
+///
 /// Useful for reading and writing the csv file :)
 /// The `page_id` could, for example, be "535".
 /// The `markdown_name` could, for example, be "Research/JULEA.md".
@@ -22,30 +23,30 @@ pub struct PageToFileMapping {
 #[derive(Debug)]
 pub struct PageContent {
     pub markdown_name: String,
-    /// The relevant markdown file converted to HTML.
-    html: String,
+    /// The relevant text, at the beginning this is the raw md text, then it's converted to html.
+    pub text: String,
     /// The title shown at the top of the page, extracted from the first line in the .md file.
     pub title: String,
 }
 
 impl PageContent {
     /// Simple constructor for a page :)
-    pub fn new(markdown_path: &str) -> anyhow::Result<Self> {
+    pub fn new(markdown_name: &str) -> anyhow::Result<Self> {
         // 1. Create the full markdown path, read it from disk and parse it to html.
-        let file = fs::read_to_string(Path::new(MARKDOWN_DIR).join(markdown_path))?;
+        let file = fs::read_to_string(Path::new(MARKDOWN_DIR).join(markdown_name))?;
 
         // 2. Extract the title.
         let mut lines = file.lines();
-        let title = lines.by_ref().take(1).next().context(format!("The file: {markdown_path} is empty but is expected to have at least one line to serve as the title."))?;
+        let title = lines.by_ref().take(1).next().context(format!("The file: {markdown_name} is empty but is expected to have at least one line to serve as the title."))?;
         let title = title.strip_prefix("# ").unwrap_or(title).to_string();
-        // Join the remaining lines and convert them to html.
-        let html = markdown::to_html(&lines.join("\n"));
+        // Join the remaining lines
+        let markdown = lines.join("\n");
 
         // 2. Done :)
-        let markdown_path = markdown_path.to_string();
+        let markdown_name = markdown_name.to_string();
         let page = Self {
-            markdown_name: markdown_path,
-            html,
+            markdown_name,
+            text: markdown,
             title,
         };
 
@@ -62,6 +63,7 @@ pub struct MappedPage {
 }
 
 impl MappedPage {
+    #[must_use]
     pub const fn new(content: PageContent, page_id: u64) -> Self {
         Self { page_id, content }
     }
@@ -84,10 +86,11 @@ impl MappedPage {
         if self.is_up_to_date(&extra, json_content_path)? {
             return Ok(());
         }
+
         // Update the extra JSON.
         match extra.pointer_mut(json_content_path) {
             None => bail!("Missing or invalid content field."),
-            Some(content) => *content = self.content.html.clone().into(),
+            Some(content) => *content = self.content.text.clone().into(),
         }
 
         // Wrap it like this: { extra: $old_extra$ }
@@ -97,7 +100,7 @@ impl MappedPage {
         // Send the updated and wrapped JSON to EgoCMS.
         communicator.update_extra(self.page_id, &wrapped_extra.into())?;
 
-        println!("Updated: {}", self.content.markdown_name);
+        println!("=> Updated: {}", self.content.markdown_name);
         Ok(())
     }
 
@@ -112,6 +115,6 @@ impl MappedPage {
             .ok_or_else(|| anyhow::anyhow!(format!("The extra section of the pages json: {extra} does not contain the path: {json_content_path}!")))?;
 
         // Are they the same?
-        Ok(online_content == self.content.html)
+        Ok(online_content == self.content.text)
     }
 }

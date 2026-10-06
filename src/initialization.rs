@@ -1,6 +1,6 @@
-use crate::communicator::Communicator;
-use crate::config::{Config, Inputs, MAPPING_TABLE_PATH, MARKDOWN_DIR};
-use crate::page::{MappedPage, PageContent, PageToFileMapping};
+use crate::types::communicator::Communicator;
+use crate::types::config::{Config, Inputs, MAPPING_TABLE_PATH, MARKDOWN_DIR};
+use crate::types::page::{MappedPage, PageContent, PageToFileMapping};
 use std::collections::HashSet;
 use std::fs;
 use walkdir::WalkDir;
@@ -20,7 +20,7 @@ pub fn init(
     let is_test_environment = config.rest_url.eq("https://localhost/rest/");
     if is_test_environment {
         eprintln!(
-            "WARNING: As the URL is localhost, this ia assumed to be a safe test enviornment. Invalid certificats will be accepted."
+            "WARNING: As the URL is localhost, this is assumed to be a safe test environment. Invalid certificates will be accepted."
         );
     }
     let communicator = Communicator::new(

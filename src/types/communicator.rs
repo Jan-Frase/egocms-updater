@@ -6,12 +6,12 @@ use serde_json::Value;
 /// It implements functions that cover required parts of the EgoCMS API.
 pub struct Communicator {
     /// The base URL of the rest api we are trying to communicate with. E.g.: https://localhost/rest/
-    rest_url: String,
+    pub rest_url: String,
     /// Some API calls are SITE-specific and require the site_url appended to the `rest_url`.
     /// E.g.: https://localhost/rest/materialkit/de
     /// So for this example the site_url should be "materialkit/de/".
     /// This approach fails when multiple languages are supposed to be updated, but that's fine for now.
-    site_url: String,
+    pub site_url: String,
     /// The JSON, which defines an EgoCMS page, has one section that is relevant to us. This path defines which section that is.
     client: Client,
 }
@@ -165,6 +165,19 @@ impl Communicator {
             .ok_or_else(|| anyhow::anyhow!("Missing 'extra' key!"))?;
 
         Ok(extra)
+    }
+
+    pub fn get_url(&self, id: u64) -> anyhow::Result<String> {
+        let get_extra_url = format!("{}{}{}{}", self.rest_url, self.site_url, id, "/getUrl");
+
+        let json = self
+            .client
+            .get(get_extra_url)
+            .send()?
+            .error_for_status()?
+            .json()?;
+
+        Ok(json)
     }
 }
 

@@ -11,7 +11,7 @@ following research areas:
 - I/O Interfaces
 - Programming Concepts
 
-For more information, please see our [research page](https://www.parcio.ovgu.de/Research.html).
+For more information, please see our [research page](./Research/Research.md).
 
 ## Teaching
 

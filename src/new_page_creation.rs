@@ -1,10 +1,11 @@
-use crate::communicator::Communicator;
-use crate::config::{Config, MAPPING_TABLE_PATH};
-use crate::page::{MappedPage, PageContent, PageToFileMapping};
+use crate::types::communicator::Communicator;
+use crate::types::config::{Config, MAPPING_TABLE_PATH};
+use crate::types::page::{MappedPage, PageContent, PageToFileMapping};
 use anyhow::{Context, bail};
 use serde::Deserialize;
 use std::collections::HashMap;
 
+// TODO: Move this into communicator
 #[derive(Deserialize)]
 struct NewPageResponse {
     field: NewPageField,
@@ -22,9 +23,9 @@ pub fn push_new_pages(
     mut pushed_pages: Vec<MappedPage>,
     config: &Config,
     communicator: &Communicator,
-) -> anyhow::Result<Vec<MappedPage>> {
+) -> anyhow::Result<(Vec<MappedPage>, HashMap<String, u64>)> {
     // Map the markdown path of a page to its id.
-    let mut parent_id_map: HashMap<String, u64> = pushed_pages
+    let mut md_name_to_id_map: HashMap<String, u64> = pushed_pages
         .iter()
         .map(|page| (page.content.markdown_name.clone(), page.page_id))
         .collect();
@@ -49,7 +50,7 @@ pub fn push_new_pages(
             let parent_name = get_parent_name(config, &pending_page.markdown_name)?;
 
             // Look up the parent's id. `None` means the parent is missing or not created yet.
-            match parent_id_map.get(&parent_name) {
+            match md_name_to_id_map.get(&parent_name) {
                 Some(parent_id) => {
                     // Create the page via the API.
                     let newly_mapped_page = create_page(communicator, pending_page, *parent_id)?;
@@ -59,7 +60,7 @@ pub fn push_new_pages(
                         newly_mapped_page.content.markdown_name, newly_mapped_page.page_id
                     );
                     // Update the parent_name -> id map.
-                    parent_id_map.insert(
+                    md_name_to_id_map.insert(
                         newly_mapped_page.content.markdown_name.clone(),
                         newly_mapped_page.page_id,
                     );
@@ -89,7 +90,7 @@ pub fn push_new_pages(
         pending_pages = still_pending;
     }
 
-    Ok(pushed_pages)
+    Ok((pushed_pages, md_name_to_id_map))
 }
 
 /// Returns the markdown name of the page that is the parent of `markdown_name`.
