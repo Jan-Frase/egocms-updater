@@ -126,7 +126,7 @@ impl MappedPage {
         *field.pointer_mut("/title").unwrap() = self.content.title.clone().into();
         let mut wrapped_field = Map::new();
         wrapped_field.insert("field".into(), field.take());
-        communicator.update_field(self.page_id, wrapped_field.into())?;
+        communicator.update_field(self.page_id, &Value::from(wrapped_field))?;
 
         println!("=> Updated: {}", self.content.markdown_name);
         Ok(())
@@ -135,7 +135,12 @@ impl MappedPage {
     /// Checks whether the page is up to date or not.
     /// It compares the JSON sent by the EgoCMS API against the markdown content.
     /// The `json_content_path` identifies the relevant part of the JSON body.
-    fn is_up_to_date(&self, extra: &Value, field: &Value, json_content_path: &str) -> anyhow::Result<bool> {
+    fn is_up_to_date(
+        &self,
+        extra: &Value,
+        field: &Value,
+        json_content_path: &str,
+    ) -> anyhow::Result<bool> {
         // 1. Compare the text.
         // Extract the relevant JSON section.
         let online_content = extra

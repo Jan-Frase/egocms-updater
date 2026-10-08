@@ -120,8 +120,8 @@ fn get_parent_name(config: &Config, markdown_name: &str) -> anyhow::Result<Strin
                         "{}/{grandpa}/{grandpa}.md",
                         sections[..sections.len() - 1].join("/")
                     )
-                        .trim_start_matches('/')
-                        .to_string()
+                    .trim_start_matches('/')
+                    .to_string()
                 },
             )
         }

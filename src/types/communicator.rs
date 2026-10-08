@@ -1,7 +1,7 @@
-use std::collections::HashMap;
 use reqwest::blocking::{Client, Response};
 use serde::Serialize;
 use serde_json::Value;
+use std::collections::HashMap;
 
 /// This struct takes care of communications with the EgoCMS.
 /// It implements functions that cover required parts of the EgoCMS API.
@@ -97,7 +97,12 @@ impl Communicator {
     /// * `id` - The id of the parent.
     /// * `title` - Shown on the page.
     /// * `parent_extra` - The extra of the parent, will be copied.
-    pub fn new_child(&mut self, parent_id: u64, name: &str, title: &str) -> anyhow::Result<Response> {
+    pub fn new_child(
+        &mut self,
+        parent_id: u64,
+        name: &str,
+        title: &str,
+    ) -> anyhow::Result<Response> {
         let new_child_url = format!(
             "{}{}{}{}",
             self.rest_url, self.site_url, parent_id, "/newChild"
@@ -147,7 +152,7 @@ impl Communicator {
         Ok(result)
     }
 
-    pub fn update_field(&self, id: u64, field: Value) -> anyhow::Result<Response> {
+    pub fn update_field(&self, id: u64, field: &Value) -> anyhow::Result<Response> {
         let update_extra_url =
             format!("{}{}{}{}", self.rest_url, self.site_url, id, "/updateField");
 
@@ -181,7 +186,10 @@ impl Communicator {
     pub fn get_field(&mut self, id: u64) -> anyhow::Result<Value> {
         let mut result = self.get_page(id)?;
 
-        let name = result.as_object_mut().and_then(|obj| obj.remove("field")).ok_or_else(|| anyhow::anyhow!("Mising `field` entry."))?;
+        let name = result
+            .as_object_mut()
+            .and_then(|obj| obj.remove("field"))
+            .ok_or_else(|| anyhow::anyhow!("Mising `field` entry."))?;
 
         Ok(name)
     }

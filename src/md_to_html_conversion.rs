@@ -28,11 +28,11 @@ fn convert_single_page(
         .map(|event| -> anyhow::Result<Event> {
             match event {
                 Event::Start(Tag::Link {
-                                 link_type,
-                                 mut dest_url,
-                                 title,
-                                 id,
-                             }) if is_local_md_link(&dest_url) => {
+                    link_type,
+                    mut dest_url,
+                    title,
+                    id,
+                }) if is_local_md_link(&dest_url) => {
                     convert_local_md_link(&mut dest_url, page, md_name_to_id_map, communicator)?;
                     Ok(Event::Start(Tag::Link {
                         link_type,
