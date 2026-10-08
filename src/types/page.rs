@@ -60,19 +60,28 @@ impl PageContent {
 pub struct MappedPage {
     pub page_id: u64,
     pub content: PageContent,
+    pub html: Option<String>,
 }
 
 impl MappedPage {
     #[must_use]
     pub const fn new(content: PageContent, page_id: u64) -> Self {
-        Self { page_id, content }
+        Self {
+            page_id,
+            content,
+            html: None,
+        }
     }
 
     pub fn new_from_mapping(mapping: &PageToFileMapping) -> anyhow::Result<Self> {
         let content = PageContent::new(mapping.markdown_name.as_str())?;
         let page_id = mapping.page_id;
 
-        Ok(Self { page_id, content })
+        Ok(Self {
+            page_id,
+            content,
+            html: None,
+        })
     }
 
     /// Executes the actual updating of the EgoCMS page.
@@ -90,7 +99,7 @@ impl MappedPage {
         // Update the extra JSON.
         match extra.pointer_mut(json_content_path) {
             None => bail!("Missing or invalid content field."),
-            Some(content) => *content = self.content.text.clone().into(),
+            Some(content) => *content = self.html.clone().into(),
         }
 
         // Wrap it like this: { extra: $old_extra$ }
@@ -115,6 +124,6 @@ impl MappedPage {
             .ok_or_else(|| anyhow::anyhow!(format!("The extra section of the pages json: {extra} does not contain the path: {json_content_path}!")))?;
 
         // Are they the same?
-        Ok(online_content == self.content.text)
+        Ok(self.html.as_ref().unwrap().eq(&online_content.to_string()))
     }
 }

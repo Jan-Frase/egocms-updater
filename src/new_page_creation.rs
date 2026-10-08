@@ -69,6 +69,7 @@ pub fn push_new_pages(
                         page_id: newly_mapped_page.page_id,
                         markdown_name: newly_mapped_page.content.markdown_name.clone(),
                     })?;
+                    wtr.flush()?;
                     // Actually push the change :)
                     pushed_pages.push(newly_mapped_page);
                 }
@@ -119,8 +120,8 @@ fn get_parent_name(config: &Config, markdown_name: &str) -> anyhow::Result<Strin
                         "{}/{grandpa}/{grandpa}.md",
                         sections[..sections.len() - 1].join("/")
                     )
-                    .trim_start_matches('/')
-                    .to_string()
+                        .trim_start_matches('/')
+                        .to_string()
                 },
             )
         }

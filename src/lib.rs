@@ -15,7 +15,7 @@ pub fn run(args: Inputs) -> anyhow::Result<()> {
         new_page_creation::push_new_pages(pending_pages, pushed_pages, &config, &communicator)?;
 
     print_stage("3. Convert markdown to html");
-    convert_md_to_html(&mut pushed_pages, &md_name_to_id_map, &communicator);
+    convert_md_to_html(&mut pushed_pages, &md_name_to_id_map, &communicator)?;
 
     print_stage("4. Update pages");
     // For each tracked page...

@@ -11,46 +11,49 @@ pub fn convert_md_to_html(
     pushed_pages: &mut Vec<MappedPage>,
     md_name_to_id_map: &HashMap<String, u64>,
     communicator: &Communicator,
-) {
+) -> anyhow::Result<()> {
     for page in pushed_pages {
-        convert_single_page(page, md_name_to_id_map, communicator);
+        let html = convert_single_page(page, md_name_to_id_map, communicator)?;
+        page.html = Some(html);
     }
+    Ok(())
 }
 
 fn convert_single_page(
-    page: &mut MappedPage,
+    page: &MappedPage,
     md_name_to_id_map: &HashMap<String, u64>,
     communicator: &Communicator,
-) {
-    let events = Parser::new(&page.content.text).filter_map(|event| match event {
-        Event::Start(Tag::Link {
-            link_type,
-            mut dest_url,
-            title,
-            id,
-        }) if is_local_md_link(&dest_url) => {
-            convert_local_md_link(&mut dest_url, page, md_name_to_id_map, communicator)
-                .ok()
-                .map(|()| {
-                    Event::Start(Tag::Link {
+) -> anyhow::Result<String> {
+    let events = Parser::new(&page.content.text)
+        .map(|event| -> anyhow::Result<Event> {
+            match event {
+                Event::Start(Tag::Link {
+                                 link_type,
+                                 mut dest_url,
+                                 title,
+                                 id,
+                             }) if is_local_md_link(&dest_url) => {
+                    convert_local_md_link(&mut dest_url, page, md_name_to_id_map, communicator)?;
+                    Ok(Event::Start(Tag::Link {
                         link_type,
                         dest_url,
                         title,
                         id,
-                    })
-                })
-        }
-        other => Some(other),
-    });
+                    }))
+                }
+                other => Ok(other),
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
     let mut html = String::new();
-    push_html(&mut html, events);
+    push_html(&mut html, events.into_iter());
 
-    page.content.text = html;
+    Ok(html)
 }
 
 fn is_local_md_link(dest_url: &CowStr) -> bool {
-    dest_url.ends_with(".md") && dest_url.starts_with("./")
+    dest_url.ends_with(".md") && (dest_url.starts_with("./") || dest_url.starts_with("../"))
 }
 
 fn convert_local_md_link(
@@ -74,14 +77,11 @@ fn convert_local_md_link(
     // To finish it, append the prefix.
     let new_url = format!(
         "{}/{}",
+        // TODO: Improve the entire URL handling across the project? Its somewhat brittle rn.
         communicator.rest_url.strip_suffix("/rest/").unwrap(),
         url.trim_start_matches('/')
     );
 
-    // OLD: https://localhost/rest/materialkit/de/seitentypen/blog/eintrag-1/research/smash
-    // WORKS: https://localhost/seitentypen/blog/eintrag-1/research/smash
-    // NEW: index.php?site=materialkit&id=946&lang=de
-    // DAFUG?
     // 3. Profit!
     println!(
         "On page: {:30}, converted {} to {:?}",
@@ -100,7 +100,7 @@ fn resolve_link_relative_to_current_file(current: &str, link: &str) -> anyhow::R
 
     for link_seq in link.split('/') {
         match link_seq {
-            "." => {}
+            "" | "." => {}
             ".." => {
                 current
                     .pop()

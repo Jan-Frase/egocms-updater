@@ -1,6 +1,6 @@
 // TODO:
-// - Media Files via Interface in EgoCMS. (keep low effort, not via media area, only direct attached to page)
 // - Ensure that when updating an existing site, the title and names are updated as well.
+// - Media Files via Interface in EgoCMS. (keep low effort, not via media area, only direct attached to page)
 // - Download EgoCMS pages into dirs and .md files.
 // - Figure out how (if at all) to handle md file deletions?
 // - Create an action to run the program on pushes.
