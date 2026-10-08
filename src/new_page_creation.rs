@@ -22,7 +22,7 @@ pub fn push_new_pages(
     mut pending_pages: Vec<PageContent>,
     mut pushed_pages: Vec<MappedPage>,
     config: &Config,
-    communicator: &Communicator,
+    communicator: &mut Communicator,
 ) -> anyhow::Result<(Vec<MappedPage>, HashMap<String, u64>)> {
     // Map the markdown path of a page to its id.
     let mut md_name_to_id_map: HashMap<String, u64> = pushed_pages
@@ -134,17 +134,11 @@ fn get_parent_name(config: &Config, markdown_name: &str) -> anyhow::Result<Strin
 
 /// Creates the page in the CMS below `parent_id` and returns the newly mapped page.
 fn create_page(
-    communicator: &Communicator,
+    communicator: &mut Communicator,
     pending_page: PageContent,
     parent_id: u64,
 ) -> anyhow::Result<MappedPage> {
-    // Research/cosemos_problem.md => cosemos_problem
-    let file_name = pending_page
-        .markdown_name
-        .rsplit('/')
-        .next()
-        .context("Empty markdown name.")?;
-    let name = file_name.strip_suffix(".md").unwrap_or(file_name);
+    let name = pending_page.get_name()?;
 
     let response = communicator.new_child(parent_id, name, &pending_page.title)?;
     let new_page_response: NewPageResponse = response.json()?;

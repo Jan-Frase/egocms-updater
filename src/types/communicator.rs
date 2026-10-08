@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use reqwest::blocking::{Client, Response};
 use serde::Serialize;
 use serde_json::Value;
@@ -14,6 +15,8 @@ pub struct Communicator {
     pub site_url: String,
     /// The JSON, which defines an EgoCMS page, has one section that is relevant to us. This path defines which section that is.
     client: Client,
+    /// Caches the result of `get_page` for each id. Useful to avoid unneeded requests.
+    page_cache: HashMap<u64, Value>,
 }
 
 #[derive(Serialize)]
@@ -72,12 +75,15 @@ impl Communicator {
 
         let client = client.cookie_store(true).build()?;
 
+        let page_cache = HashMap::new();
+
         Self::start_session(&rest_url, user_id, user_token, &client)?;
 
         let communicator = Self {
             rest_url,
             site_url,
             client,
+            page_cache,
         };
 
         Ok(communicator)
@@ -91,7 +97,7 @@ impl Communicator {
     /// * `id` - The id of the parent.
     /// * `title` - Shown on the page.
     /// * `parent_extra` - The extra of the parent, will be copied.
-    pub fn new_child(&self, parent_id: u64, name: &str, title: &str) -> anyhow::Result<Response> {
+    pub fn new_child(&mut self, parent_id: u64, name: &str, title: &str) -> anyhow::Result<Response> {
         let new_child_url = format!(
             "{}{}{}{}",
             self.rest_url, self.site_url, parent_id, "/newChild"
@@ -141,22 +147,26 @@ impl Communicator {
         Ok(result)
     }
 
+    pub fn update_field(&self, id: u64, field: Value) -> anyhow::Result<Response> {
+        let update_extra_url =
+            format!("{}{}{}{}", self.rest_url, self.site_url, id, "/updateField");
+
+        let result = self
+            .client
+            .put(update_extra_url)
+            .json(&field)
+            .send()?
+            .error_for_status()?;
+        Ok(result)
+    }
+
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~
     // GET Functions
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~
     /// This needs a page id to get a page's information, like it content etc.
     /// https://hilfe.egocms.com/entwicklung/klassen-_-funktionen/site/getpage
-    pub fn get_extra(&self, id: u64) -> anyhow::Result<Value> {
-        let get_extra_url = format!("{}{}{}", self.rest_url, self.site_url, "getPage");
-        let params = vec![("id", id)];
-
-        let mut result: Value = self
-            .client
-            .get(get_extra_url)
-            .query(&params)
-            .send()?
-            .error_for_status()?
-            .json()?;
+    pub fn get_extra(&mut self, id: u64) -> anyhow::Result<Value> {
+        let mut result = self.get_page(id)?;
 
         // We are only interested in the `extra` section.
         let extra = result
@@ -165,6 +175,15 @@ impl Communicator {
             .ok_or_else(|| anyhow::anyhow!("Missing 'extra' key!"))?;
 
         Ok(extra)
+    }
+
+    /// Gets the name of a page.
+    pub fn get_field(&mut self, id: u64) -> anyhow::Result<Value> {
+        let mut result = self.get_page(id)?;
+
+        let name = result.as_object_mut().and_then(|obj| obj.remove("field")).ok_or_else(|| anyhow::anyhow!("Mising `field` entry."))?;
+
+        Ok(name)
     }
 
     pub fn get_url(&self, id: u64) -> anyhow::Result<String> {
@@ -216,6 +235,27 @@ impl Communicator {
             .put(start_session_url)
             .send()?
             .error_for_status()?;
+        Ok(result)
+    }
+
+    fn get_page(&mut self, id: u64) -> anyhow::Result<Value> {
+        let result = match self.page_cache.entry(id) {
+            std::collections::hash_map::Entry::Occupied(entry) => entry.get().clone(),
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                let get_extra_url = format!("{}{}{}", self.rest_url, self.site_url, "getPage");
+                let params = vec![("id", id)];
+
+                let result: Value = self
+                    .client
+                    .get(get_extra_url)
+                    .query(&params)
+                    .send()?
+                    .error_for_status()?
+                    .json()?;
+                entry.insert(result).clone()
+            }
+        };
+
         Ok(result)
     }
 }

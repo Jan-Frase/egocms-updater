@@ -1,5 +1,4 @@
 // TODO:
-// - Ensure that when updating an existing site, the title and names are updated as well.
 // - Media Files via Interface in EgoCMS. (keep low effort, not via media area, only direct attached to page)
 // - Download EgoCMS pages into dirs and .md files.
 // - Figure out how (if at all) to handle md file deletions?
@@ -20,6 +19,7 @@
 // Automatically create new pages.
 // -> the name of the new page is derived from the file name, the title is the first line in the md
 // - Links via page_id/paths.
+// - Ensure that when updating an existing site, the title and names are updated as well.
 
 use anyhow::Context;
 use auto_update_egocms::run;
