@@ -1,7 +1,7 @@
 // TODO:
 // - Media Files via Interface in EgoCMS. (keep low effort, not via media area, only direct attached to page)
 // - Download EgoCMS pages into dirs and .md files.
-// - Figure out how (if at all) to handle md file deletions?
+// - Handle md file deletions?
 // - Create an action to run the program on pushes.
 // - Get rid of any unneeded unwrap.
 // - Document usage!

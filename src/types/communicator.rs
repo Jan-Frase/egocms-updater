@@ -1,7 +1,9 @@
 use reqwest::blocking::{Client, Response};
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::path::Path;
+use reqwest::blocking::multipart::{Form, Part};
 
 /// This struct takes care of communications with the EgoCMS.
 /// It implements functions that cover required parts of the EgoCMS API.
@@ -48,6 +50,7 @@ impl Drop for Communicator {
 // Public Functions
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~
 // TODO: These functions return reqwest data types. It might be cleaner to parse the responses into structs or similar first.
+// This should be split into two, one very thin wrapper around the api calls, one helper struct.
 impl Communicator {
     /// Initializes a new `Communicator` instance.
     ///
@@ -134,6 +137,33 @@ impl Communicator {
             .error_for_status()?;
 
         Ok(result)
+    }
+
+    pub fn new_file(&mut self, id: u64, bytes: Vec<u8>, name: String) -> anyhow::Result<()> {
+        let new_file_url =
+            format!("{}{}{}{}", self.rest_url, self.site_url, id, "/newFile");
+
+        let form = Form::new()
+            // newFile($source, $name, $options)
+            .text(
+                "@data",
+                json!(["@file", name, {"title": "{name}"}]).to_string(),
+            )
+            .part(
+                "upload",
+                Part::bytes(bytes).file_name(name.to_owned()),
+            );
+
+        let result = self
+            .client
+            .post(new_file_url)
+            .multipart(form)
+            .send()?
+            .error_for_status()?;
+
+        println!("{:?}", result);
+
+        Ok(())
     }
 
     /// This fully replaces the contents of the extra part of the page!
