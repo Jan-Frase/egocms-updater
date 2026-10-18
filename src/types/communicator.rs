@@ -1,9 +1,8 @@
+use reqwest::blocking::multipart::{Form, Part};
 use reqwest::blocking::{Client, Response};
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
-use std::path::Path;
-use reqwest::blocking::multipart::{Form, Part};
 
 /// This struct takes care of communications with the EgoCMS.
 /// It implements functions that cover required parts of the EgoCMS API.
@@ -140,19 +139,15 @@ impl Communicator {
     }
 
     pub fn new_file(&mut self, id: u64, bytes: Vec<u8>, name: String) -> anyhow::Result<()> {
-        let new_file_url =
-            format!("{}{}{}{}", self.rest_url, self.site_url, id, "/newFile");
+        let new_file_url = format!("{}{}{}{}", self.rest_url, self.site_url, id, "/newFile");
 
         let form = Form::new()
             // newFile($source, $name, $options)
             .text(
                 "@data",
-                json!(["@file", name, {"title": "{name}"}]).to_string(),
+                json!(["@file", name, {"title": "title"}]).to_string(),
             )
-            .part(
-                "upload",
-                Part::bytes(bytes).file_name(name.to_owned()),
-            );
+            .part("upload", Part::bytes(bytes).file_name(name));
 
         let result = self
             .client
@@ -161,7 +156,7 @@ impl Communicator {
             .send()?
             .error_for_status()?;
 
-        println!("{:?}", result);
+        println!("{result:?}");
 
         Ok(())
     }
