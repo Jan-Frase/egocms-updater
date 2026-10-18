@@ -21,8 +21,6 @@ pub fn run(args: Inputs) -> anyhow::Result<()> {
     let bytes = fs::read("./files/img.jpeg")?;
     communicator.new_file(56, bytes, "IMG".into())?;
 
-    return Ok(());
-
     print_stage("4. Update pages");
     // For each tracked page...
     for page in &pushed_pages {
