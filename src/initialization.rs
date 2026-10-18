@@ -1,9 +1,9 @@
 use crate::types::communicator::Communicator;
 use crate::types::config::{Config, Inputs, MAPPING_TABLE_PATH, MARKDOWN_DIR};
 use crate::types::page::{MappedPage, PageContent, PageToFileMapping};
+use anyhow::Context;
 use std::collections::HashSet;
 use std::fs;
-use anyhow::Context;
 use walkdir::WalkDir;
 
 /// Responsible for loading the core data needed for this application.
@@ -30,7 +30,8 @@ pub fn init(
         &inputs.user_id,
         &inputs.user_token,
         is_test_environment,
-    ).context("Connecting to EgoCMS failed! Are the user-id and user-token correct?")?;
+    )
+    .context("Connecting to EgoCMS failed! Are the user-id and user-token correct?")?;
 
     // 1.4 Read the table that maps: Markdown-file <-> EgoCMS-page-id.
     let mut csv = csv::ReaderBuilder::new()

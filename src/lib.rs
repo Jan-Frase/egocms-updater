@@ -3,9 +3,9 @@ mod md_to_html_conversion;
 mod new_page_creation;
 pub mod types;
 
-use std::fs;
 use crate::md_to_html_conversion::convert_md_to_html;
 use crate::types::config::Inputs;
+use std::fs;
 
 pub fn run(args: Inputs) -> anyhow::Result<()> {
     print_stage("1. Initialize resources");
