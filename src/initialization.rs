@@ -1,5 +1,5 @@
 use crate::types::communicator::Communicator;
-use crate::types::config::{Config, Inputs, MAPPING_TABLE_PATH, MARKDOWN_DIR};
+use crate::types::config::{Config, Inputs, MARKDOWN_DIR};
 use crate::types::page::{MappedPage, PageContent, PageToFileMapping};
 use anyhow::Context;
 use std::collections::HashSet;
@@ -8,16 +8,16 @@ use walkdir::WalkDir;
 
 /// Responsible for loading the core data needed for this application.
 /// That is:
-/// Vec<Page> - A vector containing all pages, even those not yet pushed to the CMS.
+/// Vec<PageContent> - A vector containing all markdown files.
 /// Communicator - Responsible for API calls.
 /// Config - Stores various core aspects like the URL.
 pub fn init(
     inputs: Inputs,
-) -> anyhow::Result<(Vec<PageContent>, Vec<MappedPage>, Communicator, Config)> {
-    // 1.2 Load the provided config.
+) -> anyhow::Result<(Vec<PageContent>, Communicator, Config)> {
+    // 1 Load the provided config.
     let config: Config = toml::from_str(&fs::read_to_string(inputs.config_path)?)?;
 
-    // 1.3 Open a connection to EgoCMS's REST API.
+    // 2 Open a connection to EgoCMS's REST API.
     let is_test_environment = config.rest_url.eq("https://localhost/rest/");
     if is_test_environment {
         eprintln!(
@@ -33,38 +33,19 @@ pub fn init(
     )
     .context("Connecting to EgoCMS failed! Are the user-id and user-token correct?")?;
 
-    // 1.4 Read the table that maps: Markdown-file <-> EgoCMS-page-id.
-    let mut csv = csv::ReaderBuilder::new()
-        // This ignores lines starting with # as a comment.
-        .comment(Some(b'#'))
-        .from_path(MAPPING_TABLE_PATH)?;
-
-    // 1.5 Create pages based on mapping table.
-    let mappings: Vec<PageToFileMapping> = csv.deserialize().collect::<Result<Vec<_>, _>>()?;
-    let mut pushed_pages: Vec<MappedPage> = Vec::new();
-    for mapping in mappings {
-        pushed_pages.push(MappedPage::new_from_mapping(&mapping)?);
-    }
-    drop(csv);
-
-    // 1.6 Create not yet mapped pages.
-    let mut pending_pages: Vec<PageContent> = Vec::new();
-    let new_files = get_new_md_files(&pushed_pages)?;
-    for new_file in new_files {
-        let page = PageContent::new(&new_file)?;
-        pending_pages.push(page);
+    // 3 Load Markdown files.
+    let mut markdown_files: Vec<PageContent> = Vec::new();
+    let markdown_paths = get_all_markdown_paths()?;
+    for file_path in markdown_paths {
+        let page = PageContent::new(&file_path)?;
+        markdown_files.push(page);
     }
 
-    Ok((pending_pages, pushed_pages, communicator, config))
+    Ok((markdown_files, communicator, config))
 }
 
-/// Gathers all paths of .md files that haven't yet been pushed to the CMS.
-fn get_new_md_files(pushed_pages: &[MappedPage]) -> anyhow::Result<Vec<String>> {
-    // HashSet containing all names of already mapped pages.
-    let pages: HashSet<_> = pushed_pages
-        .iter()
-        .map(|page| page.content.markdown_name.clone())
-        .collect();
+/// Gathers all paths of .md files.
+fn get_all_markdown_paths() -> anyhow::Result<Vec<String>> {
     // Get all files in the markdown dir.
     let mut new_file_paths: Vec<String> = Vec::new();
     for entry in WalkDir::new(MARKDOWN_DIR) {
@@ -79,6 +60,5 @@ fn get_new_md_files(pushed_pages: &[MappedPage]) -> anyhow::Result<Vec<String>> 
     }
 
     // Only retain the files that are not in the mapping table yet, i.e.: all files that are new.
-    new_file_paths.retain(|path| !pages.contains(path));
     Ok(new_file_paths)
 }

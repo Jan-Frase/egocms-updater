@@ -15,8 +15,6 @@ pub struct Communicator {
     pub site_url: String,
     /// The JSON, which defines an EgoCMS page, has one section that is relevant to us. This path defines which section that is.
     client: Client,
-    /// Caches the result of `get_page` for each id. Useful to avoid unneeded requests.
-    page_cache: HashMap<u64, Value>,
 }
 
 #[derive(Serialize)]
@@ -75,15 +73,12 @@ impl Communicator {
 
         let client = client.cookie_store(true).build()?;
 
-        let page_cache = HashMap::new();
-
         Self::start_session(&rest_url, user_id, user_token, &client)?;
 
         let communicator = Self {
             rest_url,
             site_url,
             client,
-            page_cache,
         };
 
         Ok(communicator)
@@ -108,9 +103,6 @@ impl Communicator {
             self.rest_url, self.site_url, parent_id, "/newChild"
         );
 
-        // Get the parents extra.
-        let parent_extra: Value = self.get_extra(parent_id)?;
-
         // Generate the parameters.
         let new_child_parameters = NewChildParameters {
             name: name.to_string(),
@@ -123,8 +115,6 @@ impl Communicator {
 
         let mut wrapped_json = serde_json::Map::new();
         wrapped_json.insert("field".into(), json);
-        // I copy the extra of the parent to avoid the new child lacking some entries I expect later on when pushing the .md to the page.
-        wrapped_json.insert("extra".into(), parent_extra);
 
         let result = self
             .client
@@ -133,22 +123,6 @@ impl Communicator {
             .send()?
             .error_for_status()?;
 
-        Ok(result)
-    }
-
-    /// This fully replaces the contents of the extra part of the page!
-    /// It should thus be used by first getting `extra` modifying it, and then updating :)
-    /// https://hilfe.egocms.com/entwicklung/klassen-_-funktionen/page/updateextra
-    pub fn update_extra(&self, id: u64, new_extra: &Value) -> anyhow::Result<Response> {
-        let update_extra_url =
-            format!("{}{}{}{}", self.rest_url, self.site_url, id, "/updateExtra");
-
-        let result = self
-            .client
-            .put(update_extra_url)
-            .json(new_extra)
-            .send()?
-            .error_for_status()?;
         Ok(result)
     }
 
@@ -168,32 +142,6 @@ impl Communicator {
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~
     // GET Functions
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~
-    /// This needs a page id to get a page's information, like it content etc.
-    /// https://hilfe.egocms.com/entwicklung/klassen-_-funktionen/site/getpage
-    pub fn get_extra(&mut self, id: u64) -> anyhow::Result<Value> {
-        let mut result = self.get_page(id)?;
-
-        // We are only interested in the `extra` section.
-        let extra = result
-            .as_object_mut()
-            .and_then(|obj| obj.remove("extra"))
-            .ok_or_else(|| anyhow::anyhow!("Missing 'extra' key!"))?;
-
-        Ok(extra)
-    }
-
-    /// Gets the name of a page.
-    pub fn get_field(&mut self, id: u64) -> anyhow::Result<Value> {
-        let mut result = self.get_page(id)?;
-
-        let name = result
-            .as_object_mut()
-            .and_then(|obj| obj.remove("field"))
-            .ok_or_else(|| anyhow::anyhow!("Mising `field` entry."))?;
-
-        Ok(name)
-    }
-
     pub fn get_url(&self, id: u64) -> anyhow::Result<String> {
         let get_extra_url = format!("{}{}{}{}", self.rest_url, self.site_url, id, "/getUrl");
 
@@ -243,27 +191,6 @@ impl Communicator {
             .put(start_session_url)
             .send()?
             .error_for_status()?;
-        Ok(result)
-    }
-
-    fn get_page(&mut self, id: u64) -> anyhow::Result<Value> {
-        let result = match self.page_cache.entry(id) {
-            std::collections::hash_map::Entry::Occupied(entry) => entry.get().clone(),
-            std::collections::hash_map::Entry::Vacant(entry) => {
-                let get_extra_url = format!("{}{}{}", self.rest_url, self.site_url, "getPage");
-                let params = vec![("id", id)];
-
-                let result: Value = self
-                    .client
-                    .get(get_extra_url)
-                    .query(&params)
-                    .send()?
-                    .error_for_status()?
-                    .json()?;
-                entry.insert(result).clone()
-            }
-        };
-
         Ok(result)
     }
 }

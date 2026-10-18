@@ -1,45 +1,21 @@
 use crate::types::communicator::Communicator;
-use crate::types::config::{Config, MAPPING_TABLE_PATH};
+use crate::types::config::{Config};
 use crate::types::page::{MappedPage, PageContent, PageToFileMapping};
 use anyhow::{Context, bail};
-use serde::Deserialize;
 use std::collections::HashMap;
-
-// TODO: Move this into communicator
-#[derive(Deserialize)]
-struct NewPageResponse {
-    field: NewPageField,
-}
-
-#[derive(Deserialize)]
-struct NewPageField {
-    id: u64,
-}
+use serde_json::Value;
 
 /// Creates an EgoCMS page for every `Page` that has no `page_id` yet,
 /// stores the returned id in the page's mapping, and rewrites the mapping table.
 pub fn push_new_pages(
     mut pending_pages: Vec<PageContent>,
-    mut pushed_pages: Vec<MappedPage>,
     config: &Config,
     communicator: &mut Communicator,
 ) -> anyhow::Result<(Vec<MappedPage>, HashMap<String, u64>)> {
     // Map the markdown path of a page to its id.
-    let mut md_name_to_id_map: HashMap<String, u64> = pushed_pages
-        .iter()
-        .map(|page| (page.content.markdown_name.clone(), page.page_id))
-        .collect();
-    // Write the new mapping table to disk.
-    let mut wtr = csv::WriterBuilder::new()
-        .comment(Some(b'#'))
-        .from_path(MAPPING_TABLE_PATH)?;
-    for page in &pushed_pages {
-        wtr.serialize(PageToFileMapping {
-            page_id: page.page_id,
-            markdown_name: page.content.markdown_name.clone(),
-        })?;
-    }
-    wtr.flush()?;
+    let mut md_name_to_id_map: HashMap<String, u64> = HashMap::new();
+    let mut pushed_pages: Vec<MappedPage> = Vec::new();
+
     // A page can only be created once its parent has an id. Instead of sorting by the parent tree,
     // we keep looping over the unmapped pages until a full pass creates nothing new.
     while !pending_pages.is_empty() {
@@ -64,12 +40,6 @@ pub fn push_new_pages(
                         newly_mapped_page.content.markdown_name.clone(),
                         newly_mapped_page.page_id,
                     );
-                    // Write the change to the csv file.
-                    wtr.serialize(PageToFileMapping {
-                        page_id: newly_mapped_page.page_id,
-                        markdown_name: newly_mapped_page.content.markdown_name.clone(),
-                    })?;
-                    wtr.flush()?;
                     // Actually push the change :)
                     pushed_pages.push(newly_mapped_page);
                 }
@@ -141,8 +111,8 @@ fn create_page(
     let name = pending_page.get_name()?;
 
     let response = communicator.new_child(parent_id, name, &pending_page.title)?;
-    let new_page_response: NewPageResponse = response.json()?;
-    let new_page_id = new_page_response.field.id;
+    let new_page_response: Value = response.json()?;
+    let new_page_id = new_page_response.pointer("field/id").unwrap().as_u64().unwrap();
     let mapped_page = MappedPage::new(pending_page, new_page_id);
     Ok(mapped_page)
 }

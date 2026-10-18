@@ -7,9 +7,6 @@ use std::path::PathBuf;
 /// the path to the current binary (supplied by default), the path to the config.toml, the user_id, and the user_token.
 const EXPECTED_AMOUNT_OF_ARGUMENTS: usize = 4;
 
-/// Path to the mapping table CSV.
-pub const MAPPING_TABLE_PATH: &str = "./config/mapping_table.csv";
-
 /// Directory where the Markdown pages are stored.
 pub const MARKDOWN_DIR: &str = "./pages/";
 
