@@ -13,6 +13,9 @@ pub const MAPPING_TABLE_PATH: &str = "./config/mapping_table.csv";
 /// Directory where the Markdown pages are stored.
 pub const MARKDOWN_DIR: &str = "./pages/";
 
+/// Directory whose files are uploaded to the CMS.
+pub const FILES_DIR: &str = "./files/";
+
 /// Just a small struct that allows serde to parse the config.toml :)
 /// All fields here are further documented in the config.toml file.
 #[derive(Deserialize)]
@@ -21,6 +24,8 @@ pub struct Config {
     pub(crate) site_url: String,
     pub(crate) home_page: String,
     pub(crate) json_content_path: String,
+    pub(crate) media_site_url: String,
+    pub(crate) media_folder_id: u64,
 }
 
 /// Small struct holding all the required cli-arguments.

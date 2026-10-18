@@ -139,32 +139,36 @@ impl Communicator {
         Ok(result)
     }
 
-    pub fn new_file(&mut self, id: u64, bytes: Vec<u8>, name: String) -> anyhow::Result<()> {
-        let new_file_url = format!("{}{}{}{}", self.rest_url, "materialkit_media/de/", 1, "/newFile");
-
+    /// Uploads a new file to the media site and returns the id of the created file page.
+    /// Files live on the media site (e.g. `materialkit_media/de/`), NOT on the content site:
+    /// on a content site EgoCMS silently does nothing but still answers with 201.
+    /// * `media_site_url` - E.g. "materialkit_media/de/".
+    /// * `parent_id` - The id of the media folder the file is created in.
+    pub fn new_file(
+        &self,
+        media_site_url: &str,
+        parent_id: u64,
+        bytes: Vec<u8>,
+        name: &str,
+    ) -> anyhow::Result<u64> {
+        let url = format!("{}{}{}/newFile", self.rest_url, media_site_url, parent_id);
         let form = Form::new()
-            // newFile($source, $name, $options)
-            .text(
-                "@data",
-                json!(["@file", name, {"title": "PDF"}]).to_string(),
-            )
-            .part("upload", Part::bytes(bytes).file_name(name));
+            .text("@data", json!(["@file", name, {"title": name}]).to_string())
+            .part("upload", Part::bytes(bytes).file_name(name.to_string()));
 
         let result: Value = self
             .client
-            .post(new_file_url)
+            .post(url)
             .multipart(form)
             .send()?
             .error_for_status()?
             .json()?;
 
-        if result.is_null() {
-            bail!("Error creating file. EgoCMS returned NULL!");
-        }
-
-        println!("{result:?}");
-
-        Ok(())
+        // EgoCMS answers 201 even if it refused the file, in which case the body is empty/null.
+        result
+            .pointer("/field/id")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow::anyhow!("Error creating file {name}. EgoCMS returned: {result}"))
     }
 
     /// This fully replaces the contents of the extra part of the page!

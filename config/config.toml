@@ -12,3 +12,9 @@ home_page = "Parcio.md"
 
 # The JSON which defines a EgoCMS page has one section that is relevant to us. This path defines which section that is.
 json_content_path = "/_contents/center/0/content1"
+
+# Files are stored on the media site paired with the content site, not on the content site itself.
+media_site_url = "materialkit_media/de/"
+
+# The id of the media folder the files are uploaded to. 1 is the root of the media site.
+media_folder_id = 1
