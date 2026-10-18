@@ -3,6 +3,7 @@ use reqwest::blocking::{Client, Response};
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::collections::HashMap;
+use anyhow::bail;
 
 /// This struct takes care of communications with the EgoCMS.
 /// It implements functions that cover required parts of the EgoCMS API.
@@ -92,7 +93,7 @@ impl Communicator {
     }
 
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~
-    // PUT Functions
+    // POST/PUT Functions
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~
     /// Creates a new child-page.
     /// https://hilfe.egocms.com/entwicklung/klassen-_-funktionen/page/newchild
@@ -139,22 +140,27 @@ impl Communicator {
     }
 
     pub fn new_file(&mut self, id: u64, bytes: Vec<u8>, name: String) -> anyhow::Result<()> {
-        let new_file_url = format!("{}{}{}{}", self.rest_url, self.site_url, id, "/newFile");
+        let new_file_url = format!("{}{}{}{}", self.rest_url, "materialkit_media/de/", 1, "/newFile");
 
         let form = Form::new()
             // newFile($source, $name, $options)
             .text(
                 "@data",
-                json!(["@file", name, {"title": "title"}]).to_string(),
+                json!(["@file", name, {"title": "PDF"}]).to_string(),
             )
             .part("upload", Part::bytes(bytes).file_name(name));
 
-        let result = self
+        let result: Value = self
             .client
             .post(new_file_url)
             .multipart(form)
             .send()?
-            .error_for_status()?;
+            .error_for_status()?
+            .json()?;
+
+        if result.is_null() {
+            bail!("Error creating file. EgoCMS returned NULL!");
+        }
 
         println!("{result:?}");
 
@@ -193,6 +199,24 @@ impl Communicator {
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~
     // GET Functions
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~
+    pub fn get_media_url(&mut self) -> anyhow::Result<Value> {
+        let rest_url = &self.rest_url;
+        let site_url = &self.site_url;
+        let method_name = "/getMediaUrl";
+        let get_extra_url = format!("{rest_url}{site_url}{method_name}");
+
+        let json = self
+            .client
+            .get(get_extra_url)
+            .send()?
+            .error_for_status()?
+            .json()?;
+
+        println!("{json}");
+
+        Ok(json)
+    }
+
     /// This needs a page id to get a page's information, like it content etc.
     /// https://hilfe.egocms.com/entwicklung/klassen-_-funktionen/site/getpage
     pub fn get_extra(&mut self, id: u64) -> anyhow::Result<Value> {

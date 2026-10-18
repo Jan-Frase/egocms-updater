@@ -8,7 +8,7 @@ rest_url = "https://localhost/rest/"
 site_url = "materialkit/de/"
 
 # The home page file. It is assumed that this file already exists as an EgoCMS page and is properly mapped to it.
-home_page = "Home.md"
+home_page = "Parcio.md"
 
 # The JSON which defines a EgoCMS page has one section that is relevant to us. This path defines which section that is.
 json_content_path = "/_contents/center/0/content1"

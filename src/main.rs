@@ -9,8 +9,10 @@
 // Maybes:
 // - Receive user_id and token via environment vars instead of cli inputs.
 
-// Open Questions:
+// Open Questions/Issues:
 // - How should I deal with pages not representable by Markdown? I.e.: people pages.
+// - To avoid conflicts with previous state: I could simply remove everything from the CMS and upload everything on every change. Also has the benefit of getting rid of the mapping table.
+// - Renaming a md file breaks the mapping table.
 
 // Notes:
 // - Publications can be ignored.

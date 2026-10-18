@@ -1,27 +1,31 @@
-mod initialization;
-mod md_to_html_conversion;
-mod new_page_creation;
 pub mod types;
+pub mod logic;
 
-use crate::md_to_html_conversion::convert_md_to_html;
 use crate::types::config::Inputs;
 use std::fs;
+use crate::logic::*;
 
 pub fn run(args: Inputs) -> anyhow::Result<()> {
     print_stage("1. Initialize resources");
     let (pending_pages, pushed_pages, mut communicator, config) = initialization::init(args)?;
 
+    // let _ = communicator.get_media_url()?;
+
+
     print_stage("2. Create new pages");
     let (mut pushed_pages, md_name_to_id_map) =
-        new_page_creation::push_new_pages(pending_pages, pushed_pages, &config, &mut communicator)?;
+        page_creation::push_new_pages(pending_pages, pushed_pages, &config, &mut communicator)?;
 
-    print_stage("3. Convert markdown to html");
-    convert_md_to_html(&mut pushed_pages, &md_name_to_id_map, &communicator)?;
+    print_stage("3. Update files");
+    let bytes = fs::read("./files/PPE-2026-05-OpenMP.pdf")?;
+    communicator.new_file(56, bytes, "PDF".into())?;
 
-    let bytes = fs::read("./files/img.jpeg")?;
-    communicator.new_file(56, bytes, "IMG".into())?;
+    return Ok(());
 
-    print_stage("4. Update pages");
+    print_stage("4. Convert markdown to html");
+    md_to_html_conversion::convert_md_to_html(&mut pushed_pages, &md_name_to_id_map, &communicator)?;
+
+    print_stage("5. Update pages");
     // For each tracked page...
     for page in &pushed_pages {
         // ... update it, if required.

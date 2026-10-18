@@ -93,7 +93,7 @@ fn convert_local_md_link(
 
 /// Resolves `link` (relative to the file `current`) to a name from the mapping table.
 /// ("Research/Research.md", "./CoSEMoS/CoSEMoS.md") => "Research/CoSEMoS/CoSEMoS.md"
-/// ("Research/JULEA.md",    "../Home.md")           => "Home.md"
+/// ("Research/JULEA.md",    "../Parcio.md")           => "Parcio.md"
 fn resolve_link_relative_to_current_file(current: &str, link: &str) -> anyhow::Result<String> {
     let mut current: Vec<_> = current.split('/').collect();
     let _ = current.pop();
@@ -126,11 +126,11 @@ mod tests {
             r("Research/Research.md", "./CoSEMoS/CoSEMoS.md").unwrap(),
             "Research/CoSEMoS/CoSEMoS.md"
         );
-        assert_eq!(r("Research/JULEA.md", "../Home.md").unwrap(), "Home.md");
+        assert_eq!(r("Research/JULEA.md", "../Parcio.md").unwrap(), "Parcio.md");
         assert_eq!(
-            r("Home.md", "Research/Research.md").unwrap(),
+            r("Parcio.md", "Research/Research.md").unwrap(),
             "Research/Research.md"
         );
-        assert!(r("Home.md", "../x.md").is_err());
+        assert!(r("Parcio.md", "../x.md").is_err());
     }
 }

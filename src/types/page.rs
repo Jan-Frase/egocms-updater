@@ -108,7 +108,7 @@ impl MappedPage {
             return Ok(());
         }
 
-        // 1. Update the field.
+        // 1. Update the field. TODO: It would probably be nicer to update both in one sweep?
         // This must happen first: `field` contains a stale serialized copy of `extra`,
         // so updating it afterwards would revert the text we just wrote.
         *field.pointer_mut("/name").unwrap() = self.content.get_name()?.into();
