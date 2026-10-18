@@ -14,7 +14,7 @@ pub fn convert_md_to_html(
 ) -> anyhow::Result<()> {
     for page in pushed_pages {
         let html = convert_single_page(page, md_name_to_id_map, communicator)?;
-        *page.json.pointer_mut("").unwrap() = html;
+        page.set_html(&html)?;
     }
     Ok(())
 }

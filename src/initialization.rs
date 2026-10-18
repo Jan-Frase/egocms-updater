@@ -1,8 +1,7 @@
 use crate::types::communicator::Communicator;
 use crate::types::config::{Config, Inputs, MARKDOWN_DIR};
-use crate::types::page::{MappedPage, PageContent, PageToFileMapping};
+use crate::types::page::PageContent;
 use anyhow::Context;
-use std::collections::HashSet;
 use std::fs;
 use walkdir::WalkDir;
 
@@ -11,9 +10,7 @@ use walkdir::WalkDir;
 /// Vec<PageContent> - A vector containing all markdown files.
 /// Communicator - Responsible for API calls.
 /// Config - Stores various core aspects like the URL.
-pub fn init(
-    inputs: Inputs,
-) -> anyhow::Result<(Vec<PageContent>, Communicator, Config)> {
+pub fn init(inputs: Inputs) -> anyhow::Result<(Vec<PageContent>, Communicator, Config)> {
     // 1 Load the provided config.
     let config: Config = toml::from_str(&fs::read_to_string(inputs.config_path)?)?;
 
@@ -59,6 +56,5 @@ fn get_all_markdown_paths() -> anyhow::Result<Vec<String>> {
         new_file_paths.push(path.parse()?);
     }
 
-    // Only retain the files that are not in the mapping table yet, i.e.: all files that are new.
     Ok(new_file_paths)
 }

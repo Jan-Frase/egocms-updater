@@ -1,9 +1,9 @@
 use crate::types::communicator::Communicator;
-use crate::types::config::{Config};
-use crate::types::page::{MappedPage, PageContent, PageToFileMapping};
+use crate::types::config::Config;
+use crate::types::page::{MappedPage, PageContent};
 use anyhow::{Context, bail};
-use std::collections::HashMap;
 use serde_json::Value;
+use std::collections::HashMap;
 
 /// Creates an EgoCMS page for every `Page` that has no `page_id` yet,
 /// stores the returned id in the page's mapping, and rewrites the mapping table.
@@ -15,6 +15,22 @@ pub fn push_new_pages(
     // Map the markdown path of a page to its id.
     let mut md_name_to_id_map: HashMap<String, u64> = HashMap::new();
     let mut pushed_pages: Vec<MappedPage> = Vec::new();
+
+    // The home page is pushed to the root page of the site, the only page that survives the wipe.
+    let home_index = pending_pages
+        .iter()
+        .position(|page| page.markdown_name == config.home_page)
+        .with_context(|| {
+            format!(
+                "The home page {} does not exist in the pages dir.",
+                config.home_page
+            )
+        })?;
+    let home_content = pending_pages.remove(home_index);
+    let root_id = communicator.get_root_id()?;
+    let root_json = communicator.get_page(root_id)?;
+    md_name_to_id_map.insert(home_content.markdown_name.clone(), root_id);
+    pushed_pages.push(MappedPage::new(home_content, root_id, root_json));
 
     // A page can only be created once its parent has an id. Instead of sorting by the parent tree,
     // we keep looping over the unmapped pages until a full pass creates nothing new.
@@ -112,7 +128,10 @@ fn create_page(
 
     let response = communicator.new_child(parent_id, name, &pending_page.title)?;
     let new_page_response: Value = response.json()?;
-    let new_page_id = new_page_response.pointer("field/id").unwrap().as_u64().unwrap();
-    let mapped_page = MappedPage::new(pending_page, new_page_id);
+    let new_page_id = new_page_response
+        .pointer("/field/id")
+        .and_then(Value::as_u64)
+        .context("EgoCMS did not return the id of the new page.")?;
+    let mapped_page = MappedPage::new(pending_page, new_page_id, new_page_response);
     Ok(mapped_page)
 }

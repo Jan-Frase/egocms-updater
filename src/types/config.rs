@@ -17,7 +17,6 @@ pub struct Config {
     pub(crate) rest_url: String,
     pub(crate) site_url: String,
     pub(crate) home_page: String,
-    pub(crate) json_content_path: String,
 }
 
 /// Small struct holding all the required cli-arguments.

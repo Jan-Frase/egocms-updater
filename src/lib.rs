@@ -12,7 +12,7 @@ pub fn run(args: Inputs) -> anyhow::Result<()> {
     let (pending_pages, mut communicator, config) = initialization::init(args)?;
 
     print_stage("2. Wipe CMS");
-    wipe_cms::wipe_cms()?;
+    wipe_cms::wipe_cms(&communicator)?;
 
     print_stage("3. Create new pages");
     let (mut pushed_pages, md_name_to_id_map) =
@@ -22,10 +22,8 @@ pub fn run(args: Inputs) -> anyhow::Result<()> {
     convert_md_to_html(&mut pushed_pages, &md_name_to_id_map, &communicator)?;
 
     print_stage("5. Update pages");
-    // For each tracked page...
     for page in &pushed_pages {
-        // ... update it, if required.
-        page.update(&mut communicator, &config.json_content_path)?;
+        page.update(&communicator)?;
     }
     Ok(())
 }

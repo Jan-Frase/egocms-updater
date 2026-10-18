@@ -7,8 +7,5 @@ rest_url = "https://localhost/rest/"
 # A single EgoCMS instance can have multiple sites. This defines which site we are interested in.
 site_url = "materialkit/de/"
 
-# The home page file.
+# The home page file. It is pushed to the root page of the site.
 home_page = "Home.md"
-
-# The JSON which defines a EgoCMS page has one section that is relevant to us. This path defines which section that is.
-json_content_path = "/_contents/center/0/content1"

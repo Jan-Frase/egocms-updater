@@ -1,7 +1,9 @@
+use anyhow::bail;
+use reqwest::StatusCode;
 use reqwest::blocking::{Client, Response};
 use serde::Serialize;
-use serde_json::Value;
-use std::collections::HashMap;
+use serde_json::{Value, json};
+use std::time::Duration;
 
 /// This struct takes care of communications with the EgoCMS.
 /// It implements functions that cover required parts of the EgoCMS API.
@@ -71,7 +73,11 @@ impl Communicator {
             client = client.tls_danger_accept_invalid_certs(true);
         }
 
-        let client = client.cookie_store(true).build()?;
+        // Deleting a page with many subpages can take well over the default 30 seconds.
+        let client = client
+            .cookie_store(true)
+            .timeout(Duration::from_secs(600))
+            .build()?;
 
         Self::start_session(&rest_url, user_id, user_token, &client)?;
 
@@ -91,7 +97,6 @@ impl Communicator {
     /// https://hilfe.egocms.com/entwicklung/klassen-_-funktionen/page/newchild
     /// * `id` - The id of the parent.
     /// * `title` - Shown on the page.
-    /// * `parent_extra` - The extra of the parent, will be copied.
     pub fn new_child(
         &mut self,
         parent_id: u64,
@@ -126,22 +131,95 @@ impl Communicator {
         Ok(result)
     }
 
-    pub fn update_field(&self, id: u64, field: &Value) -> anyhow::Result<Response> {
-        let update_extra_url =
-            format!("{}{}{}{}", self.rest_url, self.site_url, id, "/updateField");
+    /// Updates `field` and `extra` of a page in one request.
+    /// `field` only needs to contain the entries that change, `extra` is replaced completely!
+    /// https://hilfe.egocms.com/entwicklung/klassen-_-funktionen/page/update
+    pub fn update_page(&self, id: u64, field: &Value, extra: &Value) -> anyhow::Result<Response> {
+        let update_url = format!("{}{}{}{}", self.rest_url, self.site_url, id, "/update");
+        // The keys of the body are the parameter names of `Page::update($param)`.
+        let body = json!({ "param": { "field": field, "extra": extra } });
 
         let result = self
             .client
-            .put(update_extra_url)
-            .json(&field)
+            .put(update_url)
+            .json(&body)
             .send()?
             .error_for_status()?;
         Ok(result)
     }
 
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // DELETE Functions
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~
+    /// Moves a page AND all of its subpages to the trash.
+    /// Returns `false` if the page could not be found, e.g. because it was already deleted together with its parent.
+    pub fn delete_page(&self, id: u64) -> anyhow::Result<bool> {
+        let url = format!("{}{}{}{}", self.rest_url, self.site_url, id, "/delete");
+        let response = self.client.delete(url).send()?;
+
+        // EgoCMS can't resolve pages in the trash and answers with 400.
+        // Note: it uses 400 for every failed DELETE, so callers have to verify the result themselves.
+        if response.status() == StatusCode::BAD_REQUEST {
+            return Ok(false);
+        }
+        response.error_for_status()?;
+        Ok(true)
+    }
+
+    /// Permanently removes everything in the trash of the site.
+    pub fn clear_trashcan(&self) -> anyhow::Result<()> {
+        let url = format!("{}{}{}", self.rest_url, self.site_url, "clearTrashcan");
+        self.client.post(url).send()?.error_for_status()?;
+        Ok(())
+    }
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~
     // GET Functions
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~
+    /// Returns the full page as `{ "field": ..., "extra": ... }`.
+    /// https://hilfe.egocms.com/entwicklung/klassen-_-funktionen/site/getpage
+    pub fn get_page(&self, id: u64) -> anyhow::Result<Value> {
+        let url = format!("{}{}{}", self.rest_url, self.site_url, "getPage");
+
+        let page: Value = self
+            .client
+            .get(url)
+            .query(&[("id", id)])
+            .send()?
+            .error_for_status()?
+            .json()?;
+        if page.is_null() {
+            bail!("EgoCMS has no page with id {id}.");
+        }
+        Ok(page)
+    }
+
+    /// Returns the id of the root page of the site. It is the only page that can't be deleted.
+    pub fn get_root_id(&self) -> anyhow::Result<u64> {
+        let url = format!("{}{}{}", self.rest_url, self.site_url, "getRoot");
+
+        let root: Value = self.client.get(url).send()?.error_for_status()?.json()?;
+        root.pointer("/field/id")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow::anyhow!("The root page has no id: {root}"))
+    }
+
+    /// Returns the ids of all pages of the site.
+    /// https://hilfe.egocms.com/entwicklung/klassen-_-funktionen/site/getpages
+    pub fn get_all_page_ids(&self) -> anyhow::Result<Vec<u64>> {
+        let url = format!("{}{}{}", self.rest_url, self.site_url, "getPages");
+
+        let pages: Vec<Value> = self.client.get(url).send()?.error_for_status()?.json()?;
+        pages
+            .iter()
+            .map(|page| {
+                page.pointer("/field/id")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| anyhow::anyhow!("A page has no id: {page}"))
+            })
+            .collect()
+    }
+
     pub fn get_url(&self, id: u64) -> anyhow::Result<String> {
         let get_extra_url = format!("{}{}{}{}", self.rest_url, self.site_url, id, "/getUrl");
 

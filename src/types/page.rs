@@ -1,9 +1,8 @@
 use crate::types::communicator::Communicator;
 use crate::types::config::MARKDOWN_DIR;
-use anyhow::{Context, bail};
+use anyhow::Context;
 use itertools::Itertools;
-use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::{Value, json};
 use std::fs;
 use std::path::Path;
 
@@ -60,6 +59,7 @@ impl PageContent {
 pub struct MappedPage {
     pub page_id: u64,
     pub content: PageContent,
+    /// The page as returned by EgoCMS: `{ "field": ..., "extra": ... }`.
     pub json: Value,
 }
 
@@ -69,41 +69,35 @@ impl MappedPage {
         Self {
             page_id,
             content,
-            json
+            json,
         }
     }
 
-    /// Executes the actual updating of the EgoCMS page.
-    pub fn update(
-        &mut self,
-        communicator: &mut Communicator,
-        json_content_path: &str,
-    ) -> anyhow::Result<()> {
-        // 1. Update the field.
-        // This must happen first: `field` contains a stale serialized copy of `extra`,
-        // so updating it after wards would revert the text we just wrote.
-        *self.json.pointer_mut("/field/name").unwrap() = self.content.get_name()?.into();
-        *self.json.pointer_mut("/field/title").unwrap() = self.content.title.clone().into();
+    /// Replaces the content blocks of the page with a single text block containing `html`.
+    /// Everything else in `extra` (layout, language settings, ...) is kept.
+    pub fn set_html(&mut self, html: &str) -> anyhow::Result<()> {
+        let extra = self
+            .json
+            .get_mut("extra")
+            .and_then(Value::as_object_mut)
+            .with_context(|| format!("{} has no `extra` section.", self.content.markdown_name))?;
+        extra.insert("_blocks".into(), json!({ "center": ["text"] }));
+        extra.insert(
+            "_contents".into(),
+            json!({ "center": [{ "content1": html, "extra": { "heading": "h2" } }] }),
+        );
+        Ok(())
+    }
 
-        // Wrap it.
-        let mut wrapped_field = Map::new();
-        wrapped_field.insert("field".into(), self.json.take());
-
-        // Update.
-        communicator.update_field(self.page_id, &Value::from(wrapped_field))?;
-
-        // 2. Update the extra.
-        match extra.pointer_mut(json_content_path) {
-            None => bail!("Missing or invalid content field."),
-            Some(content) => *content = self.html.clone().into(),
-        }
-
-        // Wrap it like this: { extra: $old_extra$ }
-        let mut wrapped_extra = Map::new();
-        wrapped_extra.insert("extra".into(), extra.take());
-
-        // Send the updated and wrapped JSON to EgoCMS.
-        communicator.update_extra(self.page_id, &wrapped_extra.into())?;
+    /// Pushes the name, title and (already converted) text to the EgoCMS page.
+    pub fn update(&self, communicator: &Communicator) -> anyhow::Result<()> {
+        // Only send what changes: the `field` returned by EgoCMS contains a stale serialized copy of `extra`,
+        // which would otherwise overwrite the new one.
+        let field = json!({
+            "name": self.content.get_name()?,
+            "title": self.content.title,
+        });
+        communicator.update_page(self.page_id, &field, &self.json["extra"])?;
 
         println!("=> Updated: {}", self.content.markdown_name);
         Ok(())
