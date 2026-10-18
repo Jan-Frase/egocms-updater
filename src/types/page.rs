@@ -108,7 +108,16 @@ impl MappedPage {
             return Ok(());
         }
 
-        // 1. Update the extra.
+        // 1. Update the field.
+        // This must happen first: `field` contains a stale serialized copy of `extra`,
+        // so updating it afterwards would revert the text we just wrote.
+        *field.pointer_mut("/name").unwrap() = self.content.get_name()?.into();
+        *field.pointer_mut("/title").unwrap() = self.content.title.clone().into();
+        let mut wrapped_field = Map::new();
+        wrapped_field.insert("field".into(), field.take());
+        communicator.update_field(self.page_id, &Value::from(wrapped_field))?;
+
+        // 2. Update the extra.
         match extra.pointer_mut(json_content_path) {
             None => bail!("Missing or invalid content field."),
             Some(content) => *content = self.html.clone().into(),
@@ -120,13 +129,6 @@ impl MappedPage {
 
         // Send the updated and wrapped JSON to EgoCMS.
         communicator.update_extra(self.page_id, &wrapped_extra.into())?;
-
-        // 2. Update the field.
-        *field.pointer_mut("/name").unwrap() = self.content.get_name()?.into();
-        *field.pointer_mut("/title").unwrap() = self.content.title.clone().into();
-        let mut wrapped_field = Map::new();
-        wrapped_field.insert("field".into(), field.take());
-        communicator.update_field(self.page_id, &Value::from(wrapped_field))?;
 
         println!("=> Updated: {}", self.content.markdown_name);
         Ok(())

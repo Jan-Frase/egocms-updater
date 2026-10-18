@@ -3,6 +3,7 @@ mod md_to_html_conversion;
 mod new_page_creation;
 pub mod types;
 
+use std::fs;
 use crate::md_to_html_conversion::convert_md_to_html;
 use crate::types::config::Inputs;
 
@@ -16,6 +17,9 @@ pub fn run(args: Inputs) -> anyhow::Result<()> {
 
     print_stage("3. Convert markdown to html");
     convert_md_to_html(&mut pushed_pages, &md_name_to_id_map, &communicator)?;
+
+    let bytes = fs::read("./files/img.jpeg")?;
+    communicator.new_file(56, bytes, "IMG".into())?;
 
     print_stage("4. Update pages");
     // For each tracked page...
