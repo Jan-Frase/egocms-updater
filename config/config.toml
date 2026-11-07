@@ -1,0 +1,29 @@
+# Configuration of the EgoCMS updater.
+# The credentials are not stored here: set the environment variables EGOCMS_USER_ID and EGOCMS_TOKEN.
+
+# Address of the EgoCMS instance, without `/rest/`.
+url = "https://localhost"
+
+# The site (Mandant) and language the pages are pushed to.
+site = "materialkit"
+language = "de"
+
+# Only for local test instances with a self-signed certificate!
+accept_invalid_certs = true
+
+# --- Optional settings, shown with their default values ---
+
+# Directory containing the markdown files and other files (images, PDFs, ...).
+# pages_dir = "./pages"
+
+# The markdown file that becomes the home page. All other pages are placed below it.
+# home_page = "Home.md"
+
+# The id of the CMS page the home page file is pushed to. Defaults to the root page of the site.
+# home_page_id = 1
+
+# The type of newly created pages.
+# page_type = "page"
+
+# The folder on the media site that the files are uploaded to. It is created if it doesn't exist.
+# media_folder = "egocms-updater"
