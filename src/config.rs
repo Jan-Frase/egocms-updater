@@ -55,7 +55,10 @@ impl Config {
                 config.url
             );
         }
-        if !config.home_page.ends_with(".md") {
+        if !std::path::Path::new(&config.home_page)
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("md"))
+        {
             bail!(
                 "`home_page` must be a .md file, got `{}`.",
                 config.home_page
@@ -64,6 +67,7 @@ impl Config {
         Ok(config)
     }
 
+    #[must_use]
     pub fn rest_url(&self) -> String {
         format!("{}/rest/", self.url)
     }
