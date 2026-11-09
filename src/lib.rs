@@ -1,31 +1,20 @@
-mod initialization;
-mod md_to_html_conversion;
-mod new_page_creation;
-pub mod types;
+pub mod config;
+pub mod credentials;
+mod local;
 
-use crate::md_to_html_conversion::convert_md_to_html;
-use crate::types::config::Inputs;
+use crate::config::Config;
+use crate::credentials::Credentials;
+use anyhow::Result;
+use local::local_state::LocalState;
+use std::path::Path;
 
-pub fn run(args: Inputs) -> anyhow::Result<()> {
-    print_stage("1. Initialize resources");
-    let (pending_pages, pushed_pages, mut communicator, config) = initialization::init(args)?;
-
-    print_stage("2. Create new pages");
-    let (mut pushed_pages, md_name_to_id_map) =
-        new_page_creation::push_new_pages(pending_pages, pushed_pages, &config, &mut communicator)?;
-
-    print_stage("3. Convert markdown to html");
-    convert_md_to_html(&mut pushed_pages, &md_name_to_id_map, &communicator)?;
-
-    print_stage("4. Update pages");
-    // For each tracked page...
-    for page in &pushed_pages {
-        // ... update it, if required.
-        page.update(&mut communicator, &config.json_content_path)?;
-    }
-    Ok(())
+pub fn download(config: &Config, credentials: &Credentials, out_dir: &Path) -> Result<()> {
+    todo!()
 }
 
-fn print_stage(title: &str) {
-    println!("\n{title}.");
+pub fn upload(config: &Config, credentials: &Credentials) -> Result<()> {
+    // 1. Gather the local state.
+    let local_state = LocalState::new(&config.pages_dir, &config.home_page)?;
+
+    Ok(())
 }

@@ -13,7 +13,7 @@ accept_invalid_certs = true
 
 # --- Optional settings, shown with their default values ---
 
-# Directory containing the markdown files and other files (images, PDFs, ...).
+# Directory containing the markdown files.
 # pages_dir = "./pages"
 
 # The markdown file that becomes the home page. All other pages are placed below it.

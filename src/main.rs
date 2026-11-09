@@ -1,9 +1,7 @@
-mod config;
-mod credentials;
-
-use crate::config::Config;
-use crate::credentials::Credentials;
 use anyhow::Result;
+use auto_update_egocms::config::Config;
+use auto_update_egocms::credentials::Credentials;
+use auto_update_egocms::{download, upload};
 use clap::Parser;
 use std::path::PathBuf;
 
@@ -25,7 +23,7 @@ enum Command {
     /// Upload the contents of ./pages to the cms.
     Upload,
     /// Download the cms into the dir.
-    Download { dir: PathBuf },
+    Download { out_dir: PathBuf },
 }
 
 fn main() -> Result<()> {
@@ -35,11 +33,7 @@ fn main() -> Result<()> {
     let credentials = Credentials::from_env()?;
 
     match cli.command {
-        Command::Upload => {
-            todo!()
-        }
-        Command::Download { dir } => {
-            todo!()
-        }
+        Command::Download { out_dir } => download(&config, &credentials, &out_dir),
+        Command::Upload => upload(&config, &credentials),
     }
 }
