@@ -14,7 +14,7 @@ accept_invalid_certs = true
 # --- Optional settings, shown with their default values ---
 
 # Directory containing the markdown files.
-# pages_dir = "./pages"
+pages_dir = "./down"
 
 # The markdown file that becomes the home page. All other pages are placed below it.
 # home_page = "Home.md"

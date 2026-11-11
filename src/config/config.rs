@@ -25,7 +25,7 @@ pub struct Config {
 }
 
 fn default_pages_dir() -> PathBuf {
-    PathBuf::from("./pages")
+    PathBuf::from("../../pages")
 }
 
 fn default_home_page() -> String {
@@ -84,7 +84,7 @@ mod tests {
                 .unwrap();
         assert_eq!(config.url, "https://example.org");
         assert_eq!(config.rest_url(), "https://example.org/rest/");
-        assert_eq!(config.pages_dir, PathBuf::from("./pages"));
+        assert_eq!(config.pages_dir, PathBuf::from("../../pages"));
         assert_eq!(config.home_page, "Home.md");
         assert_eq!(config.home_page_id, None);
         assert_eq!(config.page_type, "page");

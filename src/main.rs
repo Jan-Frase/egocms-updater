@@ -1,9 +1,9 @@
 use anyhow::Result;
-use auto_update_egocms::config::Config;
-use auto_update_egocms::credentials::Credentials;
 use auto_update_egocms::{download, upload};
 use clap::Parser;
 use std::path::PathBuf;
+use auto_update_egocms::config::config::Config;
+use auto_update_egocms::config::credentials::Credentials;
 
 #[derive(Parser)]
 #[command(name = "EgoCMS-Updater")]

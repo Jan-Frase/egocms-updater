@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-reqwest = { version = "0.13.4", features = ["blocking", "query", "cookies", "json", "form"] }
+reqwest = { version = "0.13.4", features = ["blocking", "query", "cookies", "json", "form", "multipart"] }
 serde_json = "1.0"
 serde = { version = "1.0.229", features = ["derive"] }
 csv = "1.4.0"
