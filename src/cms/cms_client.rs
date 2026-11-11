@@ -117,32 +117,43 @@ impl CmsApi for SiteClient<'_> {
         }
     }
 
-    fn new_file(
-        &mut self,
-        parent: u64,
-        name: &str,
-        bytes: &[u8],
-        extra: &Map<String, Value>,
-    ) -> anyhow::Result<CmsPage> {
-        // newFile($source, $name, $options)
-        let arguments = json!(["@file", name, { "title": name, "extra": extra }]);
-        let request = self
-            .post(&format!("{parent}/newFile"))
-            .multipart(CmsConnection::upload_form(&arguments, name, bytes));
-        // On failure (e.g. a forbidden file type) EgoCMS still answers with 201, but without a page.
-        CmsPage::from_json(&CmsConnection::send(request)?)
-            .with_context(|| format!("Uploading {name} failed."))
+    fn pool_list(&mut self, id: u64) -> anyhow::Result<Vec<String>> {
+        let files = match CmsConnection::send(self.get(&format!("{id}/pool/list")))? {
+            Value::Null => Vec::new(),
+            Value::Array(files) => files,
+            other => bail!("Expected the files of page {id}, got: {other}"),
+        };
+        files
+            .iter()
+            .map(|file| {
+                file.get("name")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .with_context(|| format!("File without name in the pool of page {id}: {file}"))
+            })
+            .collect()
     }
 
-    fn update_file(&mut self, id: u64, name: &str, bytes: &[u8]) -> anyhow::Result<()> {
-        // updateFile($source, $name)
+    fn pool_put(&mut self, id: u64, name: &str, bytes: &[u8]) -> anyhow::Result<()> {
+        // Mediapool::put($source, $name)
         let arguments = json!(["@file", name]);
         let request = self
-            .post(&format!("{id}/updateFile"))
+            .post(&format!("{id}/pool/put"))
             .multipart(CmsConnection::upload_form(&arguments, name, bytes));
+        // On failure (e.g. a forbidden file type) EgoCMS still answers with 201, but without the file.
         match CmsConnection::send(request)? {
-            Value::Bool(true) => Ok(()),
-            other => bail!("Replacing the file {name} failed: {other}"),
+            file if file.get("name").is_some() => Ok(()),
+            other => bail!("Attaching {name} to page {id} failed: {other}"),
         }
+    }
+
+    fn pool_delete(&mut self, id: u64, name: &str) -> anyhow::Result<()> {
+        let request = self
+            .cms_connection
+            .client
+            .delete(format!("{}{id}/pool/delete", self.base))
+            .query(&[("name", name)]);
+        CmsConnection::send(request)?;
+        Ok(())
     }
 }

@@ -11,7 +11,8 @@ struct Entry {
     page: CmsPage,
     parent: Option<u64>,
     deleted: bool,
-    file: Option<Vec<u8>>,
+    /// The files attached to the page.
+    pool: BTreeMap<String, Vec<u8>>,
 }
 
 pub struct FakeCms {
@@ -68,7 +69,7 @@ impl FakeCms {
                 page,
                 parent,
                 deleted: false,
-                file: None,
+                pool: BTreeMap::new(),
             },
         );
         id
@@ -93,8 +94,17 @@ impl FakeCms {
         &self.entry(id).unwrap().page
     }
 
-    pub fn file(&self, id: u64) -> Option<&[u8]> {
-        self.entry(id).ok()?.file.as_deref()
+    /// The files attached to a page, panics if it doesn't exist (anymore).
+    pub fn pool(&self, id: u64) -> &BTreeMap<String, Vec<u8>> {
+        &self.entry(id).unwrap().pool
+    }
+
+    /// Attaches a file directly, without logging it as a write.
+    pub fn attach(&mut self, id: u64, name: &str, bytes: &[u8]) {
+        self.entry_mut(id)
+            .unwrap()
+            .pool
+            .insert(name.into(), bytes.to_vec());
     }
 
     pub fn exists(&self, id: u64) -> bool {
@@ -199,23 +209,21 @@ impl CmsApi for FakeCms {
         Ok(format!("/{}", names.join("/")))
     }
 
-    fn new_file(
-        &mut self,
-        parent: u64,
-        name: &str,
-        bytes: &[u8],
-        extra: &Map<String, Value>,
-    ) -> anyhow::Result<CmsPage> {
-        self.entry(parent)?;
-        self.writes.push(format!("new_file {name}"));
-        let id = self.insert(Some(parent), name, name, extra.clone());
-        self.entry_mut(id)?.file = Some(bytes.to_vec());
-        Ok(self.get(id).clone())
+    fn pool_list(&mut self, id: u64) -> anyhow::Result<Vec<String>> {
+        Ok(self.entry(id)?.pool.keys().cloned().collect())
     }
 
-    fn update_file(&mut self, id: u64, name: &str, bytes: &[u8]) -> anyhow::Result<()> {
-        self.writes.push(format!("update_file {name}"));
-        self.entry_mut(id)?.file = Some(bytes.to_vec());
+    fn pool_put(&mut self, id: u64, name: &str, bytes: &[u8]) -> anyhow::Result<()> {
+        let page = self.entry(id)?.page.name.clone();
+        self.writes.push(format!("pool_put {page}/{name}"));
+        self.entry_mut(id)?.pool.insert(name.into(), bytes.to_vec());
+        Ok(())
+    }
+
+    fn pool_delete(&mut self, id: u64, name: &str) -> anyhow::Result<()> {
+        let page = self.entry(id)?.page.name.clone();
+        self.writes.push(format!("pool_delete {page}/{name}"));
+        self.entry_mut(id)?.pool.remove(name);
         Ok(())
     }
 }

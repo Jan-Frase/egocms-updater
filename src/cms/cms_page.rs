@@ -1,6 +1,7 @@
 use crate::cms::MARKER_KEY;
 use anyhow::Context;
 use serde_json::{Map, Value};
+use std::collections::BTreeMap;
 
 /// The parts of an EgoCMS page this tool cares about.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -45,9 +46,17 @@ impl CmsPage {
         self.marker()?.get("source")?.as_str()
     }
 
-    /// The hash stored in the marker (only used for media files).
-    pub fn hash(&self) -> Option<&str> {
-        self.marker()?.get("hash")?.as_str()
+    /// The hashes of the files in the page's pool, as stored in the marker by the last upload.
+    /// `None` if the page has no marker, i.e., what its pool contains is unknown.
+    pub fn pool_hashes(&self) -> Option<BTreeMap<String, String>> {
+        let files = self.marker()?.get("files").and_then(Value::as_object);
+        Some(
+            files
+                .into_iter()
+                .flatten()
+                .filter_map(|(name, hash)| Some((name.clone(), hash.as_str()?.to_string())))
+                .collect(),
+        )
     }
 
     fn marker(&self) -> Option<&Map<String, Value>> {
@@ -75,7 +84,7 @@ mod tests {
         let page = CmsPage::from_json(&json!({
             "field": { "id": 7, "name": "SMASH", "title": "Smash!", "extra": "a:1:{stale}" },
             "extra": {
-                "_sync": { "source": "Research/SMASH.md", "hash": "sha256:ab" },
+                "_sync": { "source": "Research/SMASH.md", "files": { "plot.png": "sha256:ab" } },
                 "_contents": { "center": [{ "content1": "<p>hi</p>" }] }
             }
         }))
@@ -84,7 +93,10 @@ mod tests {
         assert_eq!(page.name, "SMASH");
         assert_eq!(page.title, "Smash!");
         assert_eq!(page.source(), Some("Research/SMASH.md"));
-        assert_eq!(page.hash(), Some("sha256:ab"));
+        assert_eq!(
+            page.pool_hashes(),
+            Some([("plot.png".to_string(), "sha256:ab".to_string())].into())
+        );
         assert_eq!(page.content(), Some("<p>hi</p>"));
     }
 
@@ -92,10 +104,18 @@ mod tests {
     fn tolerates_pages_without_marker_or_content() {
         let page = CmsPage::from_json(&json!({ "field": { "id": 1 }, "extra": [] })).unwrap();
         assert_eq!(page.source(), None);
+        assert_eq!(page.pool_hashes(), None);
         assert_eq!(page.content(), None);
         assert!(page.extra.is_empty());
 
         assert!(CmsPage::from_json(&json!(null)).is_err());
+
+        // A marker without files means the pool is known to be empty (EgoCMS drops empty objects).
+        let page = CmsPage::from_json(
+            &json!({ "field": { "id": 1 }, "extra": { "_sync": { "source": "a.md" } } }),
+        )
+        .unwrap();
+        assert_eq!(page.pool_hashes(), Some(BTreeMap::new()));
         assert!(CmsPage::from_json(&json!({ "field": {} })).is_err());
     }
 }

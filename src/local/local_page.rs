@@ -49,7 +49,7 @@ impl LocalPage {
     }
 
     /// Returns the source of the parent page, or `None` for the home page.
-    fn parent_of(source: &str, home_page: &str) -> Option<String> {
+    pub(crate) fn parent_of(source: &str, home_page: &str) -> Option<String> {
         if source == home_page {
             return None;
         }

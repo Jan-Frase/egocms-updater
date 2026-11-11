@@ -2,9 +2,11 @@ use crate::cms::cms_client::SiteClient;
 use crate::settings::config::Config;
 use crate::settings::credentials::Credentials;
 use anyhow::{Context, bail};
+use reqwest::StatusCode;
 use reqwest::blocking::multipart::{Form, Part};
 use reqwest::blocking::{Client, RequestBuilder};
 use serde_json::Value;
+use std::thread;
 use std::time::Duration;
 
 /// A logged-in session. It is closed automatically when dropped.
@@ -49,8 +51,29 @@ impl CmsConnection {
     /// Sends a request and returns the JSON body (`Null` for an empty one).
     ///
     /// EgoCMS reports many failures with a success status, so the body is checked as well.
-    pub(super) fn send(request: RequestBuilder) -> anyhow::Result<Value> {
-        let response = request.send()?;
+    /// When the server asks to slow down (429), the request is repeated a few times after a pause.
+    pub(super) fn send(mut request: RequestBuilder) -> anyhow::Result<Value> {
+        let mut pause = Duration::from_secs(2);
+        let response = loop {
+            // File uploads can't be cloned, and thus not be repeated.
+            let retry = request.try_clone();
+            let response = request.send()?;
+            match retry {
+                Some(next)
+                    if response.status() == StatusCode::TOO_MANY_REQUESTS
+                        && pause.as_secs() <= 32 =>
+                {
+                    eprintln!(
+                        "The server asks to slow down, waiting {}s.",
+                        pause.as_secs()
+                    );
+                    thread::sleep(pause);
+                    pause *= 2;
+                    request = next;
+                }
+                _ => break response,
+            }
+        };
         let status = response.status();
         let url = response.url().path().to_string();
         let text = response.text()?;

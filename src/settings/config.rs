@@ -43,8 +43,10 @@ fn default_media_folder() -> String {
 
 impl Config {
     pub fn new(config_path: &PathBuf) -> Result<Self> {
-        let text = fs::read_to_string(config_path)
-            .context(format!("Failed to read config at {}.", config_path.display()))?;
+        let text = fs::read_to_string(config_path).context(format!(
+            "Failed to read config at {}.",
+            config_path.display()
+        ))?;
         Self::parse(&text)
     }
 

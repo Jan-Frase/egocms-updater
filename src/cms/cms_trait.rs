@@ -1,6 +1,7 @@
 use crate::cms::MARKER_KEY;
 use crate::cms::cms_page::CmsPage;
 use serde_json::{Map, Value, json};
+use std::collections::BTreeMap;
 
 /// The subset of the EgoCMS REST API this tool needs. One instance talks to one site.
 pub trait CmsApi {
@@ -31,30 +32,55 @@ pub trait CmsApi {
     fn delete(&mut self, id: u64) -> anyhow::Result<()>;
     /// The URL of a page, relative to the server, e.g. `/research/smash`.
     fn url(&mut self, id: u64) -> anyhow::Result<String>;
-    /// Uploads a file as a new child of `parent`. Only works on media sites.
-    fn new_file(
-        &mut self,
-        parent: u64,
-        name: &str,
-        bytes: &[u8],
-        extra: &Map<String, Value>,
-    ) -> anyhow::Result<CmsPage>;
-    /// Replaces the content of an existing file page.
-    fn update_file(&mut self, id: u64, name: &str, bytes: &[u8]) -> anyhow::Result<()>;
+    /// The names of the files attached to a page (its "pool").
+    fn pool_list(&mut self, id: u64) -> anyhow::Result<Vec<String>>;
+    /// Attaches a file to a page, replacing an existing file with the same name.
+    fn pool_put(&mut self, id: u64, name: &str, bytes: &[u8]) -> anyhow::Result<()>;
+    /// Removes a file from a page's pool.
+    fn pool_delete(&mut self, id: u64, name: &str) -> anyhow::Result<()>;
 }
 
-/// Builds the marker. The hash gets a prefix, as EgoCMS would turn an all-digit string into a number.
-pub fn marker(source: &str, hash: Option<&str>) -> Value {
+/// Builds the marker: the page's source file and the hashes of the files in its pool.
+/// The hashes are expected to carry a prefix like `sha256:`, as EgoCMS would turn an all-digit string into a number.
+pub fn marker(source: &str, pool_hashes: &BTreeMap<String, String>) -> Value {
     let mut marker = json!({ "source": source });
-    if let Some(hash) = hash {
-        marker["hash"] = format!("sha256:{hash}").into();
+    // EgoCMS drops empty objects anyway, a missing `files` means an empty pool.
+    if !pool_hashes.is_empty() {
+        marker["files"] = json!(pool_hashes);
     }
     marker
 }
 
-/// An `extra` containing nothing but the marker.
-pub fn marker_extra(source: &str, hash: Option<&str>) -> Map<String, Value> {
-    std::iter::once((MARKER_KEY.to_string(), marker(source, hash))).collect()
+/// An `extra` containing nothing but the marker of a page with an empty pool.
+pub fn marker_extra(source: &str) -> Map<String, Value> {
+    std::iter::once((MARKER_KEY.to_string(), marker(source, &BTreeMap::new()))).collect()
+}
+
+/// A link to a page, in the form the EgoCMS editor uses. EgoCMS turns it into the page's URL when rendering.
+pub fn page_link(site: &str, language: &str, id: u64) -> String {
+    format!("index.php?site={site}&id={id}&lang={language}")
+}
+
+/// A link to a file in the pool of a page, in the form the EgoCMS editor uses.
+pub fn pool_link(site: &str, language: &str, id: u64, name: &str) -> String {
+    format!(
+        "index.php?pool={}&site={site}&lang={language}&id={id}",
+        form_encode(name)
+    )
+}
+
+/// Encodes a query value like an HTML form does: `notes v1.txt` => `notes+v1.txt`.
+fn form_encode(value: &str) -> String {
+    value
+        .bytes()
+        .map(|byte| match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (byte as char).to_string()
+            }
+            b' ' => "+".to_string(),
+            other => format!("%{other:02X}"),
+        })
+        .collect()
 }
 
 /// Puts `html` into the first content block.
@@ -78,15 +104,38 @@ pub fn set_content(extra: &mut Map<String, Value>, html: &str) {
 
 #[cfg(test)]
 mod tests {
-    use crate::cms::cms_trait::{marker, set_content};
-    use serde_json::{Map, Value, json};
+    use super::*;
 
     #[test]
     fn builds_markers() {
-        assert_eq!(marker("a.md", None), json!({ "source": "a.md" }));
         assert_eq!(
-            marker("a.png", Some("0123")),
-            json!({ "source": "a.png", "hash": "sha256:0123" })
+            marker("a.md", &BTreeMap::new()),
+            json!({ "source": "a.md" })
+        );
+        let hashes = [("plot.png".to_string(), "sha256:0123".to_string())].into();
+        assert_eq!(
+            marker("a.md", &hashes),
+            json!({ "source": "a.md", "files": { "plot.png": "sha256:0123" } })
+        );
+        assert_eq!(
+            Value::Object(marker_extra("a.md")),
+            json!({ "_sync": { "source": "a.md" } })
+        );
+    }
+
+    #[test]
+    fn builds_links_like_the_editor() {
+        assert_eq!(
+            page_link("parcio", "de", 7),
+            "index.php?site=parcio&id=7&lang=de"
+        );
+        assert_eq!(
+            pool_link("parcio", "de", 7, "notes v1.txt"),
+            "index.php?pool=notes+v1.txt&site=parcio&lang=de&id=7"
+        );
+        assert_eq!(
+            pool_link("parcio", "de", 7, "Übung #1&2.pdf"),
+            "index.php?pool=%C3%9Cbung+%231%262.pdf&site=parcio&lang=de&id=7"
         );
     }
 
