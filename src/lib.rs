@@ -1,26 +1,21 @@
-use std::collections::HashMap;
 use crate::cms::cms_trait::CmsApi;
-mod local;
 mod cms;
 mod download;
-pub mod config;
+mod local;
+pub mod settings;
 
-use anyhow::{Context, Result};
+use crate::cms::cms_connection::CmsConnection;
+use crate::settings::config::Config;
+use crate::settings::credentials::Credentials;
+use anyhow::Result;
+use download::page_download::download_pages;
 use local::local_state::LocalState;
 use std::path::Path;
-use std::sync::Arc;
-use crate::cms::cms_client::SiteClient;
-use crate::cms::cms_connection::CmsConnection;
-use crate::cms::cms_page::CmsPage;
-use crate::config::config::Config;
-use crate::config::credentials::Credentials;
-use crate::local::local_page::LocalPage;
 
 pub fn download(config: &Config, credentials: &Credentials, out_dir: &Path) -> Result<()> {
-    download::download(config, credentials, out_dir)?;
+    download_pages(config, credentials, out_dir)?;
     Ok(())
 }
-
 
 pub fn upload(config: &Config, credentials: &Credentials) -> Result<()> {
     // 1. Gather the local state.

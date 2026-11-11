@@ -1,7 +1,6 @@
-use serde_json::{json, Value, Map};
-use crate::cms::cms_page::CmsPage;
 use crate::cms::MARKER_KEY;
-
+use crate::cms::cms_page::CmsPage;
+use serde_json::{Map, Value, json};
 
 /// The subset of the EgoCMS REST API this tool needs. One instance talks to one site.
 pub trait CmsApi {
@@ -44,7 +43,6 @@ pub trait CmsApi {
     fn update_file(&mut self, id: u64, name: &str, bytes: &[u8]) -> anyhow::Result<()>;
 }
 
-
 /// Builds the marker. The hash gets a prefix, as EgoCMS would turn an all-digit string into a number.
 pub fn marker(source: &str, hash: Option<&str>) -> Value {
     let mut marker = json!({ "source": source });
@@ -80,8 +78,8 @@ pub fn set_content(extra: &mut Map<String, Value>, html: &str) {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::{json, Value, Map};
     use crate::cms::cms_trait::{marker, set_content};
+    use serde_json::{Map, Value, json};
 
     #[test]
     fn builds_markers() {
@@ -102,9 +100,9 @@ mod tests {
                 { "content1": "quote" }
             ]}
         })
-            .as_object()
-            .cloned()
-            .unwrap();
+        .as_object()
+        .cloned()
+        .unwrap();
         set_content(&mut extra, "<p>new</p>");
         assert_eq!(
             Value::Object(extra),

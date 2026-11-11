@@ -35,10 +35,13 @@ impl LocalState {
                 continue;
             }
 
-            if std::path::Path::new(&relative_path)
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("md"))
-            {
+            // Only lowercase `.md` files are pages. `.MD` and the like are most likely a mistake.
+            let extension = std::path::Path::new(&relative_path).extension();
+            let is_page = extension.is_some_and(|ext| ext == "md");
+            if !is_page && extension.is_some_and(|ext| ext.eq_ignore_ascii_case("md")) {
+                bail!("{relative_path}: rename it to use the lowercase extension `.md`.");
+            }
+            if is_page {
                 pages.push(LocalPage::new(&relative_path, full_path, home_page)?);
             } else {
                 files.push(LocalFile::new(relative_path, full_path)?);
@@ -52,7 +55,7 @@ impl LocalState {
 
     /// Checks that the pages form a proper tree and sorts parents before their children.
     fn order_and_validate(
-        pages: Vec<LocalPage>,
+        mut pages: Vec<LocalPage>,
         home_page: &str,
     ) -> anyhow::Result<Vec<LocalPage>> {
         let sources: HashSet<&str> = pages
@@ -96,7 +99,6 @@ impl LocalState {
             })
             .collect();
 
-        let mut pages = pages;
         pages.sort_by(|a, b| {
             (depths[&a.relative_path], &a.relative_path)
                 .cmp(&(depths[&b.relative_path], &b.relative_path))
@@ -136,7 +138,7 @@ mod tests {
     }
 
     fn scan(dir: &Path) -> Result<LocalState> {
-        LocalState::new(&dir.to_path_buf(), &HOME.to_string())
+        LocalState::new(&dir.to_path_buf(), HOME)
     }
 
     #[test]
@@ -257,7 +259,7 @@ mod tests {
             ("Home.md", b"# Home"),
             ("a.pdf", b"pdf"),
             ("notes.txt", b"txt"),
-            ("Research/slides.MD", b"# not a page"),
+            ("Research/readme.mdx", b"# not a page"),
             ("no_extension", b"x"),
         ]);
         let local = scan(dir.path()).unwrap();
@@ -269,8 +271,34 @@ mod tests {
             .collect();
         assert_eq!(
             files,
-            ["Research/slides.MD", "a.pdf", "no_extension", "notes.txt"]
+            ["Research/readme.mdx", "a.pdf", "no_extension", "notes.txt"]
         );
+    }
+
+    #[test]
+    fn stops_at_uppercase_markdown_extensions() {
+        for name in [
+            "Research/slides.MD",
+            "Research/slides.Md",
+            "Research/slides.mD",
+        ] {
+            let dir = directory(&[("Home.md", b"# Home"), (name, b"# Slides")]);
+            let error = scan(dir.path()).unwrap_err();
+            assert!(error.to_string().contains(name), "{error}");
+            assert!(error.to_string().contains("lowercase extension"), "{error}");
+        }
+    }
+
+    #[test]
+    fn stops_at_an_uppercase_home_page() {
+        let dir = directory(&[("Home.MD", b"# Home")]);
+        assert!(scan(dir.path()).is_err());
+    }
+
+    #[test]
+    fn ignores_uppercase_extensions_of_hidden_files() {
+        let dir = directory(&[("Home.md", b"# Home"), (".drafts/Notes.MD", b"# N")]);
+        assert!(scan(dir.path()).is_ok());
     }
 
     #[test]
@@ -291,7 +319,7 @@ mod tests {
         let dir = directory(&[
             ("Home.md", b"# Home"),
             (".DS_Store", b"x"),
-            (".git/config", b"x"),
+            (".git/settings", b"x"),
             ("Research/.hidden.md", b"# Hidden"),
             ("Research/Research.md", b"# R"),
         ]);

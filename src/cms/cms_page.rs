@@ -1,6 +1,6 @@
+use crate::cms::MARKER_KEY;
 use anyhow::Context;
 use serde_json::{Map, Value};
-use crate::cms::MARKER_KEY;
 
 /// The parts of an EgoCMS page this tool cares about.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -67,8 +67,8 @@ impl CmsPage {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn parses_pages() {
@@ -79,7 +79,7 @@ mod tests {
                 "_contents": { "center": [{ "content1": "<p>hi</p>" }] }
             }
         }))
-            .unwrap();
+        .unwrap();
         assert_eq!(page.id, 7);
         assert_eq!(page.name, "SMASH");
         assert_eq!(page.title, "Smash!");

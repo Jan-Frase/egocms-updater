@@ -1,10 +1,11 @@
-//! An in-memory [`Cms`] for tests.
+// LLM-Disclaimer: Claude wrote this mock.
+// An in-memory [`Cms`] for tests.
 
+use crate::cms::cms_page::CmsPage;
+use crate::cms::cms_trait::CmsApi;
 use anyhow::{Context, bail};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
-use crate::cms::cms_page::CmsPage;
-use crate::cms::cms_trait::CmsApi;
 
 struct Entry {
     page: CmsPage,

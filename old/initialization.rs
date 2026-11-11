@@ -14,7 +14,7 @@ use walkdir::WalkDir;
 pub fn init(
     inputs: Inputs,
 ) -> anyhow::Result<(Vec<PageContent>, Vec<MappedPage>, Communicator, Config)> {
-    // 1.2 Load the provided config.
+    // 1.2 Load the provided settings.
     let config: Config = toml::from_str(&fs::read_to_string(inputs.config_path)?)?;
 
     // 1.3 Open a connection to EgoCMS's REST API.
@@ -73,7 +73,7 @@ fn get_new_md_files(pushed_pages: &[MappedPage]) -> anyhow::Result<Vec<String>> 
             continue;
         }
         let path = entry.path().display().to_string();
-        // This unwrapping has to be safe because WalkDir always appends the config.markdown to the path.
+        // This unwrapping has to be safe because WalkDir always appends the settings.markdown to the path.
         let path = path.strip_prefix(MARKDOWN_DIR).unwrap();
         new_file_paths.push(path.parse()?);
     }

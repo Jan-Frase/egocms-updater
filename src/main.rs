@@ -1,9 +1,9 @@
 use anyhow::Result;
+use auto_update_egocms::settings::config::Config;
+use auto_update_egocms::settings::credentials::Credentials;
 use auto_update_egocms::{download, upload};
 use clap::Parser;
 use std::path::PathBuf;
-use auto_update_egocms::config::config::Config;
-use auto_update_egocms::config::credentials::Credentials;
 
 #[derive(Parser)]
 #[command(name = "EgoCMS-Updater")]
@@ -13,7 +13,7 @@ struct Cli {
     #[command(subcommand)]
     command: Command,
 
-    /// Set the config file.
+    /// Set the settings file.
     #[arg(short, long, default_value = "./config/config.toml")]
     config_path: PathBuf,
 }

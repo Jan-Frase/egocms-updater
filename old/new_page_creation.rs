@@ -99,8 +99,8 @@ fn get_parent_name(config: &Config, markdown_name: &str) -> anyhow::Result<Strin
     // There are four cases:
     // 1. "2026/Research/blub.md"     => parent is 2026/Research/Research.md
     // 2. "2026/Research/Research.md" => parent is 2026/2026.md
-    // 3. "Research/Research.md"      => parent is the home_page from the config
-    // 4. "blub.md"                   => parent is the home_page from the config
+    // 3. "Research/Research.md"      => parent is the home_page from the settings
+    // 4. "blub.md"                   => parent is the home_page from the settings
     let mut sections: Vec<&str> = markdown_name.split('/').collect();
     let name = sections.pop().context("Empty markdown name.")?;
     let stem = name

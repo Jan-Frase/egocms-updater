@@ -1,11 +1,11 @@
-use std::time::Duration;
-use anyhow::{bail, Context};
-use reqwest::blocking::{Client, RequestBuilder};
-use reqwest::blocking::multipart::{Form, Part};
-use serde_json::Value;
 use crate::cms::cms_client::SiteClient;
-use crate::config::config::Config;
-use crate::config::credentials::Credentials;
+use crate::settings::config::Config;
+use crate::settings::credentials::Credentials;
+use anyhow::{Context, bail};
+use reqwest::blocking::multipart::{Form, Part};
+use reqwest::blocking::{Client, RequestBuilder};
+use serde_json::Value;
+use std::time::Duration;
 
 /// A logged-in session. It is closed automatically when dropped.
 pub struct CmsConnection {

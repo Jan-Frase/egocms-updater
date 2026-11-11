@@ -1,9 +1,9 @@
-use anyhow::{bail, Context};
-use reqwest::blocking::RequestBuilder;
-use serde_json::{json, Map, Value};
 use crate::cms::cms_connection::CmsConnection;
 use crate::cms::cms_page::CmsPage;
 use crate::cms::cms_trait::CmsApi;
+use anyhow::{Context, bail};
+use reqwest::blocking::RequestBuilder;
+use serde_json::{Map, Value, json};
 
 pub struct SiteClient<'a> {
     pub(super) cms_connection: &'a CmsConnection,
@@ -24,11 +24,15 @@ impl SiteClient<'_> {
     }
 
     fn get(&self, path: &str) -> RequestBuilder {
-        self.cms_connection.client.get(format!("{}{path}", self.base))
+        self.cms_connection
+            .client
+            .get(format!("{}{path}", self.base))
     }
 
     fn post(&self, path: &str) -> RequestBuilder {
-        self.cms_connection.client.post(format!("{}{path}", self.base))
+        self.cms_connection
+            .client
+            .post(format!("{}{path}", self.base))
     }
 
     fn pages(&self, path: &str) -> anyhow::Result<Vec<CmsPage>> {
@@ -39,7 +43,6 @@ impl SiteClient<'_> {
         }
     }
 }
-
 
 impl CmsApi for SiteClient<'_> {
     fn root_id(&mut self) -> anyhow::Result<u64> {
@@ -127,7 +130,8 @@ impl CmsApi for SiteClient<'_> {
             .post(&format!("{parent}/newFile"))
             .multipart(CmsConnection::upload_form(&arguments, name, bytes));
         // On failure (e.g. a forbidden file type) EgoCMS still answers with 201, but without a page.
-        CmsPage::from_json(&CmsConnection::send(request)?).with_context(|| format!("Uploading {name} failed."))
+        CmsPage::from_json(&CmsConnection::send(request)?)
+            .with_context(|| format!("Uploading {name} failed."))
     }
 
     fn update_file(&mut self, id: u64, name: &str, bytes: &[u8]) -> anyhow::Result<()> {

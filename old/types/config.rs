@@ -4,17 +4,17 @@ use std::env;
 use std::path::PathBuf;
 
 /// We require 4 parameters:
-/// the path to the current binary (supplied by default), the path to the config.toml, the user_id, and the user_token.
+/// the path to the current binary (supplied by default), the path to the settings.toml, the user_id, and the user_token.
 const EXPECTED_AMOUNT_OF_ARGUMENTS: usize = 4;
 
 /// Path to the mapping table CSV.
-pub const MAPPING_TABLE_PATH: &str = "./config/mapping_table.csv";
+pub const MAPPING_TABLE_PATH: &str = "./settings/mapping_table.csv";
 
 /// Directory where the Markdown pages are stored.
 pub const MARKDOWN_DIR: &str = "./pages/";
 
-/// Just a small struct that allows serde to parse the config.toml :)
-/// All fields here are further documented in the config.toml file.
+/// Just a small struct that allows serde to parse the settings.toml :)
+/// All fields here are further documented in the settings.toml file.
 #[derive(Deserialize)]
 pub struct Config {
     pub(crate) rest_url: String,
@@ -40,15 +40,15 @@ pub fn parse_arguments() -> anyhow::Result<Inputs> {
             EgoCMS Updater for Parcio Websites
             For more details take a look at the README.md :)
 
-            Usage: cargo run --release -- [path-to-config.toml] [user-id] [user-token]
+            Usage: cargo run --release -- [path-to-settings.toml] [user-id] [user-token]
 
-            Example: cargo run --release -- ./config/config.toml 12345 abcde
+            Example: cargo run --release -- ./settings/settings.toml 12345 abcde
             "
         );
         bail!("Invalid number of arguments!");
     }
 
-    // 1. Parse the config.toml path.
+    // 1. Parse the settings.toml path.
     let config_path = PathBuf::from(&args[1]);
     if !config_path.try_exists()? {
         bail!("Config file {} does not exist", config_path.display());

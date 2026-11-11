@@ -1,10 +1,11 @@
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use serde::Deserialize;
+use std::fmt::format;
 use std::fs;
 use std::path::PathBuf;
 
-/// Just a small struct that allows serde to parse the config.toml :)
-/// All fields here are further documented in the config.toml file.
+/// Just a small struct that allows serde to parse the settings.toml :)
+/// All fields here are further documented in the settings.toml file.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
@@ -42,7 +43,8 @@ fn default_media_folder() -> String {
 
 impl Config {
     pub fn new(config_path: &PathBuf) -> Result<Self> {
-        let text = fs::read_to_string(config_path)?;
+        let text = fs::read_to_string(config_path)
+            .context(format!("Failed to read config at {}.", config_path.display()))?;
         Self::parse(&text)
     }
 
@@ -55,10 +57,7 @@ impl Config {
                 config.url
             );
         }
-        if !std::path::Path::new(&config.home_page)
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("md"))
-        {
+        if config.home_page.strip_suffix(".md").is_none() {
             bail!(
                 "`home_page` must be a .md file, got `{}`.",
                 config.home_page
@@ -129,6 +128,13 @@ mod tests {
         );
         // URL without scheme.
         assert!(Config::parse("url = \"localhost\"\nsite = \"s\"\nlanguage = \"de\"").is_err());
+        // Home page with an uppercase extension, which would be rejected when reading the pages.
+        assert!(
+            Config::parse(
+                "url = \"https://x\"\nsite = \"s\"\nlanguage = \"de\"\nhome_page = \"Home.MD\""
+            )
+            .is_err()
+        );
         // Home page that is not markdown.
         assert!(
             Config::parse(
