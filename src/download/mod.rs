@@ -10,7 +10,7 @@ use crate::settings::config::Config;
 use crate::settings::credentials::Credentials;
 use anyhow::{Context, Result, bail};
 use file_download::download_files;
-use page_download::download_pages;
+use page_download::{Source, download_pages};
 use std::path::Path;
 
 pub fn download(config: &Config, credentials: &Credentials, out_dir: &Path) -> Result<()> {
@@ -30,13 +30,14 @@ pub fn download(config: &Config, credentials: &Credentials, out_dir: &Path) -> R
     };
 
     // 4. Download the pages and the files attached to them.
-    let pages = download_pages(
-        &mut site_client,
-        &config.site,
+    let page_types: Vec<&str> = config.page_types.iter().map(String::as_str).collect();
+    let from = Source {
+        site: &config.site,
         home_id,
-        &config.home_page,
-        out_dir,
-    )?;
+        home_page: &config.home_page,
+        page_types: &page_types,
+    };
+    let pages = download_pages(&mut site_client, &from, out_dir)?;
     let files = download_files(&mut site_client, &pages, out_dir)?;
 
     // 5. Make sure the result can be uploaded as it is.
@@ -79,7 +80,14 @@ mod tests {
         cms.attach(smash, "PSS Intro.pdf", b"slides");
 
         let dir = tempfile::tempdir().unwrap();
-        let pages = download_pages(&mut cms, "parcio", ROOT, "Home.md", dir.path()).unwrap();
+        let page_types = ["page"];
+        let from = Source {
+            site: "parcio",
+            home_id: ROOT,
+            home_page: "Home.md",
+            page_types: &page_types,
+        };
+        let pages = download_pages(&mut cms, &from, dir.path()).unwrap();
         download_files(&mut cms, &pages, dir.path()).unwrap();
         let local = LocalState::new(&dir.path().to_path_buf(), "Home.md").unwrap();
 
@@ -89,6 +97,7 @@ mod tests {
             home_id: ROOT,
             home_page: "Home.md",
             page_type: "page",
+            page_types: &page_types,
         };
         let report = sync(&mut cms, &local, &to).unwrap();
         assert_eq!((report.created, report.deleted, report.adopted), (0, 0, 3));

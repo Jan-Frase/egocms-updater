@@ -18,6 +18,8 @@ pub struct Config {
     pub home_page_id: Option<u64>,
     #[serde(default = "default_page_type")]
     pub page_type: String,
+    #[serde(default = "default_page_types")]
+    pub page_types: Vec<String>,
     #[serde(default)]
     pub accept_invalid_certs: bool,
 }
@@ -32,6 +34,10 @@ fn default_home_page() -> String {
 
 fn default_page_type() -> String {
     "page".into()
+}
+
+fn default_page_types() -> Vec<String> {
+    vec!["page".into()]
 }
 
 impl Config {
@@ -89,6 +95,7 @@ mod tests {
         assert_eq!(config.home_page, "Home.md");
         assert_eq!(config.home_page_id, None);
         assert_eq!(config.page_type, "page");
+        assert_eq!(config.page_types, ["page"]);
         assert!(!config.accept_invalid_certs);
     }
 
@@ -103,7 +110,7 @@ mod tests {
             home_page = "Index.md"
             home_page_id = 56
             page_type = "blog/entry"
-            media_folder = "files"
+            page_types = ["page", "blog/entry"]
             accept_invalid_certs = true
             "#,
         )
@@ -114,6 +121,7 @@ mod tests {
         assert_eq!(config.home_page, "Index.md");
         assert_eq!(config.home_page_id, Some(56));
         assert_eq!(config.page_type, "blog/entry");
+        assert_eq!(config.page_types, ["page", "blog/entry"]);
         assert!(config.accept_invalid_certs);
     }
 

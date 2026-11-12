@@ -1,6 +1,7 @@
 use crate::cms::cms_client::SiteClient;
 use crate::settings::config::Config;
 use crate::settings::credentials::Credentials;
+use anyhow::Result;
 use anyhow::{Context, bail};
 use reqwest::StatusCode;
 use reqwest::blocking::multipart::{Form, Part};
@@ -53,7 +54,7 @@ impl CmsConnection {
     /// Sends a request and returns the JSON body (`Null` for an empty one).
     ///
     /// EgoCMS reports many failures with a success status, so the body is checked as well.
-    pub(super) fn send(request: RequestBuilder) -> anyhow::Result<Value> {
+    pub(super) fn send(request: RequestBuilder) -> Result<Value> {
         let response = Self::send_with_retry(request)?;
         let status = response.status();
         let url = response.url().path().to_string();
@@ -74,7 +75,7 @@ impl CmsConnection {
     }
 
     /// Downloads a file from the website, e.g. an attachment of a page.
-    pub(super) fn fetch(request: RequestBuilder) -> anyhow::Result<Vec<u8>> {
+    pub(super) fn fetch(request: RequestBuilder) -> Result<Vec<u8>> {
         let response = Self::send_with_retry(request)?;
         let status = response.status();
         if !status.is_success() {
@@ -84,7 +85,7 @@ impl CmsConnection {
     }
 
     /// Sends a request. When the server asks to slow down (429), it is repeated a few times after a pause.
-    fn send_with_retry(mut request: RequestBuilder) -> anyhow::Result<Response> {
+    fn send_with_retry(mut request: RequestBuilder) -> Result<Response> {
         let mut pause = Duration::from_secs(2);
         loop {
             // File uploads can't be cloned, and thus not be repeated.

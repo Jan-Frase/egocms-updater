@@ -14,6 +14,6 @@ pub fn download(config: &Config, credentials: &Credentials, out_dir: &Path) -> R
     Ok(())
 }
 
-pub fn upload(config: &Config, credentials: &Credentials) -> Result<()> {
-    upload::upload(config, credentials)
+pub fn upload(config: &Config, credentials: &Credentials, dry_run: bool) -> Result<()> {
+    upload::upload(config, credentials, dry_run)
 }

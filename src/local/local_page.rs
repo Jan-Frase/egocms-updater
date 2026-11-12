@@ -9,6 +9,9 @@
 //! ```
 //! So a page's file is always named after its directory, and every other file belongs to the page
 //! of the directory it lies in.
+//!
+//! Page names may contain `/` (e.g. `Winter 2026/2027`), file names can't. In file names, it is
+//! written as the look-alike `∕` (U+2215, division slash): `Teaching/Winter 2026∕2027/Winter 2026∕2027.md`.
 
 use crate::local::local_file::LocalFile;
 use anyhow::{Context, bail};
@@ -51,11 +54,11 @@ impl LocalPage {
         }
 
         let file_name = relative_path.rsplit('/').next().unwrap_or(relative_path);
-        let name = file_name.strip_suffix(".md").unwrap_or(file_name);
+        let name = name_of_file(file_name.strip_suffix(".md").unwrap_or(file_name));
 
         Ok(Self {
             relative_path: relative_path.to_string(),
-            name: name.to_string(),
+            name,
             title: title.to_string(),
             markdown: markdown.trim_start_matches(['\r', '\n']).to_string(),
             parent: parent_of(relative_path, home_page),
@@ -67,6 +70,19 @@ impl LocalPage {
     pub fn dir(&self) -> &str {
         dir_of(&self.relative_path)
     }
+}
+
+/// Written in place of `/` in file names, see the module documentation.
+const SLASH: char = '∕';
+
+/// The page name a file name stands for: `Winter 2026∕2027` => `Winter 2026/2027`.
+pub fn name_of_file(file_name: &str) -> String {
+    file_name.replace(SLASH, "/")
+}
+
+/// The file name for a page name: `Winter 2026/2027` => `Winter 2026∕2027`.
+pub fn file_of_name(name: &str) -> String {
+    name.replace('/', &SLASH.to_string())
 }
 
 /// The directory a file lies in, relative to the pages directory.
@@ -171,6 +187,22 @@ mod tests {
         assert_eq!(page.parent.as_deref(), Some("Research/Research.md"));
         assert_eq!(page.dir(), "Research/SMASH");
         assert_eq!(page.files, []);
+    }
+
+    #[test]
+    fn maps_slashes_in_names_to_file_names_and_back() {
+        assert_eq!(file_of_name("Winter 2026/2027"), "Winter 2026∕2027");
+        assert_eq!(name_of_file("Winter 2026∕2027"), "Winter 2026/2027");
+        assert_eq!(name_of_file(&file_of_name("Ein-/Ausgabe")), "Ein-/Ausgabe");
+
+        let page = LocalPage::parse(
+            "Teaching/Winter 2026∕2027/Winter 2026∕2027.md",
+            "# Winter",
+            HOME,
+        )
+        .unwrap();
+        assert_eq!(page.name, "Winter 2026/2027");
+        assert_eq!(page.parent.as_deref(), Some("Teaching/Teaching.md"));
     }
 
     #[test]

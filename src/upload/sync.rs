@@ -16,7 +16,7 @@ use crate::cms::cms_page::CmsPage;
 use crate::cms::cms_trait::{CmsApi, marker, marker_extra, page_link, pool_link, set_content};
 use crate::local::local_page::{LocalPage, parent_of};
 use crate::local::local_state::LocalState;
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use sha2::{Digest, Sha256};
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -32,6 +32,8 @@ pub struct Destination<'a> {
     pub home_page: &'a str,
     /// The type of newly created pages.
     pub page_type: &'a str,
+    /// Existing pages of other types (e.g. people pages) are never taken over.
+    pub page_types: &'a [&'a str],
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -131,6 +133,13 @@ fn ensure_pages_exist<'a>(
     report: &mut Report,
 ) -> Result<Pages<'a>> {
     let home = cms.page(to.home_id)?;
+    if home.source().is_none() && !home.holds_only_text() {
+        bail!(
+            "The home page {} (id {}) contains more than a single text block, uploading would replace it.",
+            home.name,
+            home.id
+        );
+    }
     let mut remote: HashMap<String, CmsPage> = std::iter::once(home.clone())
         .chain(cms.descendants(to.home_id)?)
         .filter_map(|page| Some((page.source()?.to_string(), page)))
@@ -154,7 +163,8 @@ fn ensure_pages_exist<'a>(
                     .get(parent.as_str())
                     .context("Parents are uploaded before their children.")?
                     .id;
-                if let Some(page) = adopt(cms, parent_id, &local_page.name, &mut children)? {
+                if let Some(page) = adopt(cms, parent_id, local_page, to.page_types, &mut children)?
+                {
                     println!("= adopted {path} (id {})", page.id);
                     report.adopted += 1;
                     page
@@ -181,23 +191,36 @@ fn ensure_pages_exist<'a>(
     Ok(pages)
 }
 
-/// Finds an existing unmarked page called `name` below `parent_id`, e.g. one made before this
-/// tool was used and then downloaded. It is taken over instead of creating a duplicate.
+/// Finds an existing unmarked page with the name of `local_page` below `parent_id`, e.g. one made
+/// before this tool was used and then downloaded. It is taken over instead of creating a duplicate.
+/// Fails if that page can't be represented as markdown, as uploading would destroy its content.
 fn adopt(
     cms: &mut dyn CmsApi,
     parent_id: u64,
-    name: &str,
+    local_page: &LocalPage,
+    page_types: &[&str],
     children: &mut HashMap<u64, Vec<CmsPage>>,
 ) -> Result<Option<CmsPage>> {
     let siblings = match children.entry(parent_id) {
         Entry::Occupied(entry) => entry.into_mut(),
         Entry::Vacant(entry) => entry.insert(cms.children(parent_id)?),
     };
-    let found = siblings
+    let Some(index) = siblings
         .iter()
-        .position(|page| page.name == name && page.source().is_none());
+        .position(|page| page.name == local_page.name && page.source().is_none())
+    else {
+        return Ok(None);
+    };
+    if let Some(reason) = siblings[index].not_representable(page_types) {
+        bail!(
+            "{}: there already is a page {} (id {}) {reason}, which markdown can't represent. Rename the file or delete the page.",
+            local_page.relative_path,
+            local_page.name,
+            siblings[index].id
+        );
+    }
     // Remove it, so it can't be adopted twice.
-    Ok(found.map(|index| siblings.remove(index)))
+    Ok(Some(siblings.remove(index)))
 }
 
 /// Step 2: attaches the page's new and changed files and returns the hashes of all of them.
@@ -328,6 +351,7 @@ mod tests {
         home_id: ROOT,
         home_page: "Home.md",
         page_type: "page",
+        page_types: &["page"],
     };
 
     fn page(path: &str, content: &str, files: &[(&str, &[u8])]) -> LocalPage {
@@ -594,5 +618,63 @@ mod tests {
             cms.url(cms.find("PSS").unwrap()).unwrap(),
             "/group/teaching/pss"
         );
+    }
+
+    #[test]
+    fn refuses_to_take_over_pages_markdown_cant_represent() {
+        let mut cms = FakeCms::new();
+        let teaching = cms.add(
+            ROOT,
+            "Teaching",
+            &json!({ "_blocks": { "center": ["text", "gallery"] } }),
+        );
+        let error = sync(&mut cms, &site(), &TO).unwrap_err().to_string();
+        assert!(
+            error.contains("Teaching/Teaching.md: there already is a page Teaching"),
+            "{error}"
+        );
+        assert!(
+            error.contains("with more than a single text block"),
+            "{error}"
+        );
+        assert_eq!(cms.writes, Vec::<String>::new());
+        assert!(cms.exists(teaching));
+    }
+
+    #[test]
+    fn refuses_to_replace_an_unmarked_home_page_with_more_than_text() {
+        let mut cms = FakeCms::new();
+        let home = cms.add(
+            ROOT,
+            "Start",
+            &json!({ "_blocks": { "center": ["slider"] } }),
+        );
+        let to = Destination {
+            home_id: home,
+            ..TO
+        };
+        assert!(sync(&mut cms, &site(), &to).is_err());
+        assert_eq!(cms.writes, Vec::<String>::new());
+    }
+
+    #[test]
+    fn adopts_pages_with_slashes_in_their_name() {
+        let mut cms = FakeCms::new();
+        let teaching = cms.add(ROOT, "Teaching", &json!({}));
+        let winter = cms.add(teaching, "Winter 2026/2027", &json!({}));
+        let local = LocalState {
+            pages: vec![
+                page("Home.md", "# Welcome", &[]),
+                page("Teaching/Teaching.md", "# Teaching", &[]),
+                page(
+                    "Teaching/Winter 2026∕2027/Winter 2026∕2027.md",
+                    "# Winter",
+                    &[],
+                ),
+            ],
+        };
+        let report = upload(&mut cms, &local);
+        assert_eq!((report.adopted, report.created), (2, 0));
+        assert_eq!(cms.get(winter).name, "Winter 2026/2027");
     }
 }

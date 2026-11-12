@@ -24,3 +24,7 @@ accept_invalid_certs = true
 
 # The type of newly created pages.
 # page_type = "page"
+
+# The page types this tool manages. Pages of other types (e.g. people pages) are skipped when
+# downloading (together with all pages below them) and never taken over when uploading.
+# page_types = ["page"]

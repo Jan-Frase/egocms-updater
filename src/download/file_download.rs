@@ -47,7 +47,7 @@ fn is_plain_file_name(name: &str) -> bool {
 mod tests {
     use super::*;
     use crate::cms::mock_client::{FakeCms, ROOT};
-    use crate::download::page_download::download_pages;
+    use crate::download::page_download::{Source, download_pages};
     use serde_json::json;
 
     #[test]
@@ -60,7 +60,14 @@ mod tests {
         cms.attach(smash, "notes.md", b"# would become a page");
 
         let dir = tempfile::tempdir().unwrap();
-        let pages = download_pages(&mut cms, "parcio", ROOT, "Home.md", dir.path()).unwrap();
+        let page_types = ["page"];
+        let from = Source {
+            site: "parcio",
+            home_id: ROOT,
+            home_page: "Home.md",
+            page_types: &page_types,
+        };
+        let pages = download_pages(&mut cms, &from, dir.path()).unwrap();
         assert_eq!(download_files(&mut cms, &pages, dir.path()).unwrap(), 2);
 
         let read = |path: &str| fs::read(dir.path().join(path)).unwrap();

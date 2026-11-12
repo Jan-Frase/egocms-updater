@@ -21,7 +21,11 @@ struct Cli {
 #[derive(Parser)]
 enum Command {
     /// Upload the contents of ./pages to the cms.
-    Upload,
+    Upload {
+        /// Only show what would change, without writing anything.
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Download the cms into the dir.
     Download { out_dir: PathBuf },
 }
@@ -34,6 +38,6 @@ fn main() -> Result<()> {
 
     match cli.command {
         Command::Download { out_dir } => download(&config, &credentials, &out_dir),
-        Command::Upload => upload(&config, &credentials),
+        Command::Upload { dry_run } => upload(&config, &credentials, dry_run),
     }
 }

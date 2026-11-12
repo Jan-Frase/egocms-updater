@@ -61,6 +61,7 @@ impl FakeCms {
             id,
             name: name.into(),
             title: title.into(),
+            page_type: "page".into(),
             extra,
         };
         self.entries.insert(
@@ -92,6 +93,11 @@ impl FakeCms {
     /// The current state of a page, panics if it doesn't exist (anymore).
     pub fn get(&self, id: u64) -> &CmsPage {
         &self.entry(id).unwrap().page
+    }
+
+    /// Changes the type of a page, which is `page` by default.
+    pub fn set_type(&mut self, id: u64, page_type: &str) {
+        self.entry_mut(id).unwrap().page.page_type = page_type.into();
     }
 
     /// The files attached to a page, panics if it doesn't exist (anymore).

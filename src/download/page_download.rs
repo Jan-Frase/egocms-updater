@@ -5,9 +5,9 @@
 
 use crate::cms::cms_page::CmsPage;
 use crate::cms::cms_trait::CmsApi;
-use crate::local::local_page::{LocalPage, dir_of};
-use anyhow::{Context, Result};
-use std::collections::HashMap;
+use crate::local::local_page::{LocalPage, dir_of, file_of_name};
+use anyhow::{Context, Result, bail};
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::Path;
 
@@ -17,17 +17,33 @@ pub struct DownloadedPage {
     pub page: LocalPage,
 }
 
-/// Downloads the page `home_id` of `site` and all pages below it into `out_dir`.
+/// What to download.
+pub struct Source<'a> {
+    pub site: &'a str,
+    pub home_id: u64,
+    pub home_page: &'a str,
+    /// Pages of other types (e.g. people pages) are skipped, together with all pages below them.
+    pub page_types: &'a [&'a str],
+}
+
+/// Downloads the home page and all pages below it into `out_dir`.
+/// Pages markdown can't represent are skipped and listed.
 pub fn download_pages(
     cms: &mut dyn CmsApi,
-    site: &str,
-    home_id: u64,
-    home_page: &str,
+    from: &Source,
     out_dir: &Path,
 ) -> Result<Vec<DownloadedPage>> {
-    let tree = gather_pages(cms, home_id)?;
-    let pages = to_local_pages(&tree, site, home_page)?;
+    let mut skipped = BTreeMap::new();
+    let tree = gather_pages(cms, from, &mut skipped)?;
+    let pages = to_local_pages(&tree, from.site, from.home_page)?;
     write_pages(&pages, out_dir)?;
+    for (reason, names) in skipped {
+        eprintln!(
+            "Skipped {} pages {reason} (and the pages below them): {}",
+            names.len(),
+            names.join(", ")
+        );
+    }
     Ok(pages)
 }
 
@@ -38,11 +54,24 @@ struct TreeNode {
     parent: Option<u64>,
 }
 
-/// Fetches the home page and all pages below it. Parents come before their children.
-fn gather_pages(cms: &mut dyn CmsApi, home_id: u64) -> Result<Vec<TreeNode>> {
+/// Fetches the home page and all representable pages below it. Parents come before their children.
+/// The names of skipped pages are collected in `skipped`, by the reason they were skipped.
+fn gather_pages(
+    cms: &mut dyn CmsApi,
+    from: &Source,
+    skipped: &mut BTreeMap<String, Vec<String>>,
+) -> Result<Vec<TreeNode>> {
+    let home = cms.page(from.home_id)?;
+    // The home page is always downloaded, whatever its type, but it must not lose content.
+    if !home.holds_only_text() {
+        bail!(
+            "The home page {} (id {}) contains more than a single text block, so markdown can't represent it.",
+            home.name,
+            home.id
+        );
+    }
     let mut nodes = Vec::new();
-    let home = cms.page(home_id)?;
-    gather_subtree(cms, home, None, &mut nodes)?;
+    gather_subtree(cms, home, None, from.page_types, &mut nodes, skipped)?;
     Ok(nodes)
 }
 
@@ -50,12 +79,18 @@ fn gather_subtree(
     cms: &mut dyn CmsApi,
     page: CmsPage,
     parent: Option<u64>,
+    page_types: &[&str],
     nodes: &mut Vec<TreeNode>,
+    skipped: &mut BTreeMap<String, Vec<String>>,
 ) -> Result<()> {
     let id = page.id;
     nodes.push(TreeNode { page, parent });
     for child in cms.children(id)? {
-        gather_subtree(cms, child, Some(id), nodes)?;
+        if let Some(reason) = child.not_representable(page_types) {
+            skipped.entry(reason).or_default().push(child.name);
+            continue;
+        }
+        gather_subtree(cms, child, Some(id), page_types, nodes, skipped)?;
     }
     Ok(())
 }
@@ -92,7 +127,7 @@ fn assign_paths(tree: &[TreeNode], home_page: &str) -> Result<HashMap<u64, Strin
                 let parent_path = paths
                     .get(&parent)
                     .context("Parents are downloaded before their children.")?;
-                let name = node.page.name.replace('/', "-");
+                let name = file_of_name(&node.page.name);
                 match dir_of(parent_path) {
                     "" => format!("{name}/{name}.md"),
                     dir => format!("{dir}/{name}/{name}.md"),
@@ -248,10 +283,20 @@ mod tests {
         json!({ "_contents": { "center": [{ "content1": html }] } })
     }
 
+    fn source<'a>(page_types: &'a [&'a str]) -> Source<'a> {
+        Source {
+            site: "parcio",
+            home_id: ROOT,
+            home_page: HOME,
+            page_types,
+        }
+    }
+
     /// Downloads the fake CMS into a new temporary directory.
     fn download(cms: &mut FakeCms) -> (tempfile::TempDir, Vec<DownloadedPage>) {
         let dir = tempfile::tempdir().unwrap();
-        let pages = download_pages(cms, "parcio", ROOT, HOME, dir.path()).unwrap();
+        let types = ["page"];
+        let pages = download_pages(cms, &source(&types), dir.path()).unwrap();
         (dir, pages)
     }
 
@@ -425,5 +470,58 @@ mod tests {
             text,
             "# Links\n\n[PS](<../Research/Problem Statement/Problem Statement.md>)\n"
         );
+    }
+
+    #[test]
+    fn keeps_slashes_in_names() {
+        let mut cms = FakeCms::new();
+        let teaching = cms.add(ROOT, "Teaching", &json!({}));
+        cms.add(teaching, "Winter 2026/2027", &json!({}));
+        let (_dir, pages) = download(&mut cms);
+        let winter = &pages[2].page;
+        assert_eq!(
+            winter.relative_path,
+            "Teaching/Winter 2026∕2027/Winter 2026∕2027.md"
+        );
+        assert_eq!(winter.name, "Winter 2026/2027");
+    }
+
+    #[test]
+    fn skips_pages_markdown_cant_represent_with_everything_below() {
+        let mut cms = FakeCms::new();
+        let people = cms.add(ROOT, "People", &json!({}));
+        cms.set_type(people, "people/list");
+        cms.add(people, "Michael Kuhn", &json!({}));
+        cms.add(
+            ROOT,
+            "Gallery",
+            &json!({ "_blocks": { "center": ["text", "images"] } }),
+        );
+        cms.add(
+            ROOT,
+            "Research",
+            &json!({ "_blocks": { "center": ["text"] } }),
+        );
+
+        let (dir, pages) = download(&mut cms);
+        assert_eq!(paths(&pages), ["Home.md", "Research/Research.md"]);
+        assert!(!dir.path().join("People").exists());
+    }
+
+    #[test]
+    fn refuses_a_home_page_with_more_than_text() {
+        let mut cms = FakeCms::new();
+        let home = cms.add(
+            ROOT,
+            "Start",
+            &json!({ "_blocks": { "center": ["slider", "text"] } }),
+        );
+        let dir = tempfile::tempdir().unwrap();
+        let types = ["page"];
+        let from = Source {
+            home_id: home,
+            ..source(&types)
+        };
+        assert!(download_pages(&mut cms, &from, dir.path()).is_err());
     }
 }

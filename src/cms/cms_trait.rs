@@ -71,13 +71,20 @@ pub fn pool_link(site: &str, language: &str, id: u64, name: &str) -> String {
     )
 }
 
+/// The address under which the website serves a file of a page's pool: the page's URL without
+/// `.html`, followed by `/_/<name>`. `/Teaching/PSS.html` => `/Teaching/PSS/_/slides.pdf`.
+pub fn pool_file_url(server_url: &str, page_url: &str, name: &str) -> String {
+    let page = page_url.trim_end_matches(".html").trim_end_matches('/');
+    format!("{server_url}{page}/_/{}", path_encode(name))
+}
+
 /// Encodes a query value like an HTML form does: `notes v1.txt` => `notes+v1.txt`.
 fn form_encode(value: &str) -> String {
     percent_encode(value, "+")
 }
 
 /// Encodes a URL path segment: `notes v1.txt` => `notes%20v1.txt`.
-pub fn path_encode(value: &str) -> String {
+fn path_encode(value: &str) -> String {
     percent_encode(value, "%20")
 }
 
@@ -150,6 +157,25 @@ mod tests {
             "index.php?pool=%C3%9Cbung+%231%262.pdf&site=parcio&lang=de&id=7"
         );
         assert_eq!(path_encode("PSS-01 Intro.pdf"), "PSS-01%20Intro.pdf");
+    }
+
+    #[test]
+    fn builds_pool_file_urls() {
+        let url = |page_url| pool_file_url("https://x.de", page_url, "a b.pdf");
+        assert_eq!(url("/"), "https://x.de/_/a%20b.pdf");
+        assert_eq!(
+            url("/teaching/pss"),
+            "https://x.de/teaching/pss/_/a%20b.pdf"
+        );
+        // The URLs of the parcio site end in `.html`, some with the page id.
+        assert_eq!(
+            url("/Teaching/PSS.html"),
+            "https://x.de/Teaching/PSS/_/a%20b.pdf"
+        );
+        assert_eq!(
+            url("/Teaching/Seminar-p-616.html"),
+            "https://x.de/Teaching/Seminar-p-616/_/a%20b.pdf"
+        );
     }
 
     #[test]

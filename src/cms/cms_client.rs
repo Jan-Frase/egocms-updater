@@ -1,6 +1,6 @@
 use crate::cms::cms_connection::CmsConnection;
 use crate::cms::cms_page::CmsPage;
-use crate::cms::cms_trait::{CmsApi, path_encode};
+use crate::cms::cms_trait::{CmsApi, pool_file_url};
 use anyhow::{Context, bail};
 use reqwest::blocking::RequestBuilder;
 use serde_json::{Map, Value, json};
@@ -149,12 +149,7 @@ impl CmsApi for SiteClient<'_> {
     fn pool_get(&mut self, id: u64, name: &str) -> anyhow::Result<Vec<u8>> {
         // The REST API only describes pool files, the website serves them at `<page url>/_/<name>`.
         let page_url = self.url(id)?;
-        let url = format!(
-            "{}{}/_/{}",
-            self.cms_connection.server_url,
-            page_url.trim_end_matches('/'),
-            path_encode(name)
-        );
+        let url = pool_file_url(&self.cms_connection.server_url, &page_url, name);
         CmsConnection::fetch(self.cms_connection.client.get(url))
             .with_context(|| format!("Downloading {name} of page {id} failed."))
     }
