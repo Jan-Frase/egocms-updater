@@ -9,20 +9,9 @@ pub struct SiteClient<'a> {
     pub(super) cms_connection: &'a CmsConnection,
     /// E.g. `https://localhost/rest/materialkit/de/`.
     pub(super) base: String,
-    pub(super) language: String,
 }
 
 impl SiteClient<'_> {
-    /// A client for the media site belonging to this site, where files have to be stored.
-    pub fn media_site(&self) -> anyhow::Result<Self> {
-        let site = CmsConnection::send(self.get("getMediaSite"))?;
-        let name = site
-            .get("name")
-            .and_then(Value::as_str)
-            .context("This site has no media site, so files can't be uploaded.")?;
-        Ok(self.cms_connection.site(name, &self.language))
-    }
-
     fn get(&self, path: &str) -> RequestBuilder {
         self.cms_connection
             .client

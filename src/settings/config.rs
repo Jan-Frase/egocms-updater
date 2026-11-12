@@ -1,6 +1,5 @@
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
-use std::fmt::format;
 use std::fs;
 use std::path::PathBuf;
 
@@ -26,7 +25,7 @@ pub struct Config {
 }
 
 fn default_pages_dir() -> PathBuf {
-    PathBuf::from("../../pages")
+    PathBuf::from("./pages")
 }
 
 fn default_home_page() -> String {

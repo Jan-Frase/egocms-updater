@@ -54,10 +54,7 @@ impl LocalState {
     }
 
     /// Checks that the pages form a proper tree and sorts parents before their children.
-    fn order_and_validate(
-        mut pages: Vec<LocalPage>,
-        home_page: &str,
-    ) -> anyhow::Result<Vec<LocalPage>> {
+    fn order_and_validate(mut pages: Vec<LocalPage>, home_page: &str) -> Result<Vec<LocalPage>> {
         let sources: HashSet<&str> = pages
             .iter()
             .map(|page| page.relative_path.as_str())

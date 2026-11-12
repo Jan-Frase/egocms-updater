@@ -3,40 +3,29 @@
 //! The files follow the layout `LocalState` expects, so the next upload adopts the pages
 //! instead of creating new ones.
 
-use crate::cms::cms_connection::CmsConnection;
+use crate::cms::cms_client::SiteClient;
 use crate::cms::cms_page::CmsPage;
 use crate::cms::cms_trait::CmsApi;
 use crate::local::local_page::LocalPage;
 use crate::local::local_state::LocalState;
 use crate::settings::config::Config;
-use crate::settings::credentials::Credentials;
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-pub fn download_pages(config: &Config, credentials: &Credentials, out_dir: &Path) -> Result<()> {
-    // 1. Refuse to overwrite anything before touching the CMS.
-    if out_dir.exists() && out_dir.read_dir()?.next().is_some() {
-        bail!("{} is not empty.", out_dir.display());
-    }
-
-    // 2. Open a connection to the CMS.
-    let cms_connection = CmsConnection::open(config, credentials)?;
-    let mut site_client = cms_connection.site(&config.site, &config.language);
-
-    // 3. Get the home_id.
-    let home_id = match config.home_page_id {
-        Some(id) => id,
-        None => site_client.root_id()?,
-    };
-
-    // 4. Gather all CMS pages, convert them to local pages and write them to disk.
-    let tree = gather_pages(&mut site_client, home_id)?;
+pub fn download_pages(
+    config: &Config,
+    site_client: &mut SiteClient,
+    home_id: u64,
+    out_dir: &Path,
+) -> Result<()> {
+    // 1. Gather all CMS pages, convert them to local pages and write them to disk.
+    let tree = gather_pages(site_client, home_id)?;
     let local_pages = to_local_pages(&tree, &config.home_page)?;
     write_pages(&local_pages, out_dir)?;
 
-    // 5. Make sure the result is a valid pages' directory.
+    // 2. Make sure the result is a valid pages' directory.
     LocalState::new(&out_dir.to_path_buf(), &config.home_page).with_context(|| {
         format!(
             "The downloaded pages in {} can't be uploaded as they are.",
@@ -48,11 +37,6 @@ pub fn download_pages(config: &Config, credentials: &Credentials, out_dir: &Path
         local_pages.len(),
         out_dir.display()
     );
-
-    // 6. Files are not downloaded, uploading the result as is would delete them.
-    if let Ok(mut media_client) = site_client.media_site() {
-        warn_about_synced_files(&mut media_client, &config.media_folder)?;
-    }
     Ok(())
 }
 
@@ -176,30 +160,6 @@ fn children_dir<'a>(parent_path: &'a str, home_page: &str) -> &'a str {
         return "";
     }
     parent_path.rsplit_once('/').map_or("", |(dir, _)| dir)
-}
-
-/// Warns if the media folder contains files uploaded by this tool, as they are not downloaded.
-fn warn_about_synced_files(media: &mut dyn CmsApi, folder_name: &str) -> Result<()> {
-    let root = media.root_id()?;
-    let Some(folder) = media
-        .children(root)?
-        .into_iter()
-        .find(|page| page.name == folder_name)
-    else {
-        return Ok(());
-    };
-    let synced = media
-        .children(folder.id)?
-        .iter()
-        .filter(|file| file.source().is_some())
-        .count();
-    if synced > 0 {
-        eprintln!(
-            "Warning: the media folder {folder_name} contains {synced} files uploaded by this tool, which were not downloaded. \
-             Copy them into the pages directory before uploading it, otherwise they get deleted."
-        );
-    }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -327,16 +287,5 @@ mod tests {
         assert_eq!(children_dir("a/b/b.md", HOME), "a/b");
         // A home page in a subdirectory still has its children at the top level.
         assert_eq!(children_dir("start/start.md", "start/start.md"), "");
-    }
-
-    #[test]
-    fn counts_synced_media_files() {
-        let mut media = FakeCms::new();
-        // No folder at all.
-        assert!(warn_about_synced_files(&mut media, "files").is_ok());
-
-        let folder = media.add(ROOT, "files", &json!({}));
-        media.add(folder, "plot.png", &marked("plot.png"));
-        assert!(warn_about_synced_files(&mut media, "files").is_ok());
     }
 }

@@ -44,7 +44,6 @@ impl CmsConnection {
         SiteClient {
             cms_connection: self,
             base: format!("{}{site}/{language}/", self.rest_url),
-            language: language.to_string(),
         }
     }
 
