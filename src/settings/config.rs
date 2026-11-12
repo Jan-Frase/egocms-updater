@@ -18,8 +18,6 @@ pub struct Config {
     pub home_page_id: Option<u64>,
     #[serde(default = "default_page_type")]
     pub page_type: String,
-    #[serde(default = "default_media_folder")]
-    pub media_folder: String,
     #[serde(default)]
     pub accept_invalid_certs: bool,
 }
@@ -34,10 +32,6 @@ fn default_home_page() -> String {
 
 fn default_page_type() -> String {
     "page".into()
-}
-
-fn default_media_folder() -> String {
-    "egocms-updater".into()
 }
 
 impl Config {
@@ -95,7 +89,6 @@ mod tests {
         assert_eq!(config.home_page, "Home.md");
         assert_eq!(config.home_page_id, None);
         assert_eq!(config.page_type, "page");
-        assert_eq!(config.media_folder, "egocms-updater");
         assert!(!config.accept_invalid_certs);
     }
 
@@ -121,7 +114,6 @@ mod tests {
         assert_eq!(config.home_page, "Index.md");
         assert_eq!(config.home_page_id, Some(56));
         assert_eq!(config.page_type, "blog/entry");
-        assert_eq!(config.media_folder, "files");
         assert!(config.accept_invalid_certs);
     }
 

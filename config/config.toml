@@ -24,6 +24,3 @@ accept_invalid_certs = true
 
 # The type of newly created pages.
 # page_type = "page"
-
-# The folder on the media site that the files are uploaded to. It is created if it doesn't exist.
-# media_folder = "egocms-updater"
