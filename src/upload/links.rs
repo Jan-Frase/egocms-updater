@@ -3,6 +3,7 @@
 //! A link to another `.md` file becomes a link to that page. A link to any other local file
 //! points into the pool of the page owning the file, i.e. the page of the file's directory.
 
+use crate::cms::cms_trait::percent_decode;
 use crate::local::local_file::LocalFile;
 use crate::local::local_page::LocalPage;
 use crate::local::local_state::LocalState;
@@ -134,7 +135,8 @@ fn rewrite<'u>(
         Some((path, anchor)) => (path, Some(anchor)),
         None => (dest_url.as_ref(), None),
     };
-    let target = resolve_relative(current, path)
+    // Paths may be written with escapes, e.g. `Problem%20Statement/Problem%20Statement.md`.
+    let target = resolve_relative(current, &percent_decode(path))
         .and_then(|target| resolve(&target))
         .with_context(|| format!("{current}: broken link `{dest_url}`"))?;
     Ok(match anchor {
@@ -224,6 +226,26 @@ mod tests {
             "<p><a href=\"URL(Research/SMASH/SMASH.md)\">SMASH</a> and \
              <img src=\"URL(Research/plot.png)\" alt=\"Plot\" title=\"A plot\" /></p>\n"
         );
+    }
+
+    #[test]
+    fn accepts_paths_with_spaces_written_both_ways() {
+        // A plain space ends a link in markdown, so it has to be escaped or put in `<…>`.
+        for markdown in [
+            "[PS](./Problem%20Statement/Problem%20Statement.md)",
+            "[PS](<./Problem Statement/Problem Statement.md>)",
+        ] {
+            let mut targets = Vec::new();
+            rewrite_links(markdown, "Research/CoSEMoS/CoSEMoS.md", &mut |target| {
+                targets.push(target.to_string());
+                Ok(String::new())
+            })
+            .unwrap();
+            assert_eq!(
+                targets,
+                ["Research/CoSEMoS/Problem Statement/Problem Statement.md"]
+            );
+        }
     }
 
     #[test]

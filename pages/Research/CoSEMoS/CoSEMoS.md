@@ -14,7 +14,7 @@ and interfaces. Consequently, no modifications will be necessary to run applicat
 preserve past investments in scientific software development.
 
 More information can be found in
-the [Problem Statement](https://www.parcio.ovgu.de/Research/CoSEMoS/Problem+Statement.html).
+the [Problem Statement](./Problem%20Statement/Problem%20Statement.md).
 
 ## Funding
 

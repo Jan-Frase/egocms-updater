@@ -88,6 +88,30 @@ fn path_encode(value: &str) -> String {
     percent_encode(value, "%20")
 }
 
+/// Decodes `%XX` escapes: `Problem%20Statement` => `Problem Statement`, `%C3%9C` => `Ü`.
+/// Broken escapes are kept as they are.
+pub fn percent_decode(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        // `%` followed by two hex digits.
+        let escaped = (bytes[i] == b'%')
+            .then(|| bytes.get(i + 1..i + 3))
+            .flatten()
+            .and_then(|hex| std::str::from_utf8(hex).ok())
+            .and_then(|hex| u8::from_str_radix(hex, 16).ok());
+        if let Some(byte) = escaped {
+            decoded.push(byte);
+            i += 3;
+        } else {
+            decoded.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8_lossy(&decoded).into_owned()
+}
+
 /// Keeps letters, digits and `-_.~`, writes spaces as `space` and everything else as `%XX`.
 fn percent_encode(value: &str, space: &str) -> String {
     value
@@ -157,6 +181,20 @@ mod tests {
             "index.php?pool=%C3%9Cbung+%231%262.pdf&site=parcio&lang=de&id=7"
         );
         assert_eq!(path_encode("PSS-01 Intro.pdf"), "PSS-01%20Intro.pdf");
+    }
+
+    #[test]
+    fn decodes_percent_escapes() {
+        assert_eq!(percent_decode("Problem%20Statement"), "Problem Statement");
+        assert_eq!(percent_decode("%C3%9Cbung%231%262.pdf"), "Übung#1&2.pdf");
+        assert_eq!(percent_decode("a+b"), "a+b");
+        // Broken escapes are kept as they are.
+        assert_eq!(percent_decode("100%"), "100%");
+        assert_eq!(percent_decode("%zz"), "%zz");
+        assert_eq!(
+            percent_decode(&path_encode("Ein-/Ausgabe ∕ x")),
+            "Ein-/Ausgabe ∕ x"
+        );
     }
 
     #[test]

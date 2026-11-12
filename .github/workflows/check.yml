@@ -1,4 +1,4 @@
-name: Clippy-Formatting-Building
+name: Check
 on: [ push, pull_request ]
 
 jobs:
@@ -6,17 +6,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          components: rustfmt
-          override: true
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
 
       - name: Is the formatter happy?
-        run: cargo fmt -- --check
+        run: cargo fmt --check
 
       - name: Is Clippy happy?
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Do the tests pass?
+        run: cargo test
 
       - name: Build!
-        run: cargo build
+        run: cargo build --release

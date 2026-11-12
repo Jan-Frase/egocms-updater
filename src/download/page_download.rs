@@ -4,7 +4,7 @@
 //! the pages instead of creating new ones: every page `name` goes to `<parent dir>/<name>/<name>.md`.
 
 use crate::cms::cms_page::CmsPage;
-use crate::cms::cms_trait::CmsApi;
+use crate::cms::cms_trait::{CmsApi, percent_decode};
 use crate::local::local_page::{LocalPage, dir_of, file_of_name};
 use anyhow::{Context, Result, bail};
 use std::collections::{BTreeMap, HashMap};
@@ -243,32 +243,8 @@ fn relative_path(from: &str, target: &str) -> String {
 
 /// Decodes a query value like an HTML form: `notes+v1.txt` => `notes v1.txt`, `%C3%9C` => `Ü`.
 fn form_decode(value: &str) -> String {
-    let bytes = value.as_bytes();
-    let mut decoded = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        // `%` followed by two hex digits.
-        let escaped = (bytes[i] == b'%')
-            .then(|| bytes.get(i + 1..i + 3))
-            .flatten()
-            .and_then(|hex| std::str::from_utf8(hex).ok())
-            .and_then(|hex| u8::from_str_radix(hex, 16).ok());
-        match (bytes[i], escaped) {
-            (_, Some(byte)) => {
-                decoded.push(byte);
-                i += 3;
-            }
-            (b'+', None) => {
-                decoded.push(b' ');
-                i += 1;
-            }
-            (byte, None) => {
-                decoded.push(byte);
-                i += 1;
-            }
-        }
-    }
-    String::from_utf8_lossy(&decoded).into_owned()
+    // A literal `+` is encoded as `%2B`, so replacing `+` first is safe.
+    percent_decode(&value.replace('+', " "))
 }
 
 #[cfg(test)]
@@ -445,6 +421,7 @@ mod tests {
     #[test]
     fn decodes_form_values() {
         assert_eq!(form_decode("notes+v1.txt"), "notes v1.txt");
+        assert_eq!(form_decode("1%2B1"), "1+1");
         assert_eq!(form_decode("%C3%9Cbung%231%262.pdf"), "Übung#1&2.pdf");
         // Broken escapes are kept as they are.
         assert_eq!(form_decode("100%"), "100%");
