@@ -6,16 +6,15 @@
 //!
 //! The upload runs in four steps, so a page never links to something that doesn't exist yet:
 //! 1. Make sure every page exists, so all pages have an id.
-//! 2. Attach new and changed files to their pages.
+//! 2. Attach new and changed files to their pages (all of them, as pages may link to the files of others).
 //! 3. Update the content of the pages that changed.
-//! 4. Delete files that are no longer linked, then pages whose file is gone.
+//! 4. Delete files that are gone locally, then pages whose file is gone.
 
 use super::links::{Links, Target, pool_name, rewrite_links};
 use crate::cms::MARKER_KEY;
 use crate::cms::cms_page::CmsPage;
 use crate::cms::cms_trait::{CmsApi, marker, marker_extra, page_link, pool_link, set_content};
-use crate::local::local_file::LocalFile;
-use crate::local::local_page::LocalPage;
+use crate::local::local_page::{LocalPage, parent_of};
 use crate::local::local_state::LocalState;
 use anyhow::{Context, Result};
 use sha2::{Digest, Sha256};
@@ -76,39 +75,43 @@ struct Pages<'a> {
 pub fn sync(cms: &mut dyn CmsApi, local: &LocalState, to: &Destination) -> Result<Report> {
     // Check all links before touching the CMS, so a broken link changes nothing.
     let links = Links::new(local);
-    let pool_files = local
-        .pages
-        .iter()
-        .map(|page| links.pool_files(page))
-        .collect::<Result<Vec<_>>>()?;
-    for path in unlinked_files(local, &pool_files) {
-        eprintln!("Warning: no page links to {path}, so it is not uploaded.");
+    for page in &local.pages {
+        links.check(page)?;
     }
 
     let mut report = Report::default();
     let pages = ensure_pages_exist(cms, local, to, &mut report)?;
+    let id = |page: &LocalPage| pages.by_path[page.relative_path.as_str()].id;
 
     let mut stale_files = Vec::new();
-    for (local_page, files) in local.pages.iter().zip(&pool_files) {
+    let mut pool_hashes = Vec::new();
+    for local_page in &local.pages {
         let page = &pages.by_path[local_page.relative_path.as_str()];
-        let hashes = attach_files(cms, local_page, page, files, &mut stale_files, &mut report)?;
+        pool_hashes.push(attach_files(
+            cms,
+            local_page,
+            page,
+            &mut stale_files,
+            &mut report,
+        )?);
+    }
 
+    for (local_page, hashes) in local.pages.iter().zip(&pool_hashes) {
         let html = rewrite_links(
             &local_page.markdown,
             &local_page.relative_path,
             &mut |path| {
                 Ok(match links.target(path)? {
-                    Target::Page(target) => page_link(
-                        to.site,
-                        to.language,
-                        pages.by_path[target.relative_path.as_str()].id,
-                    ),
-                    Target::File(file) => pool_link(to.site, to.language, page.id, pool_name(file)),
+                    Target::Page(target) => page_link(to.site, to.language, id(target)),
+                    Target::File { owner, file } => {
+                        pool_link(to.site, to.language, id(owner), pool_name(file))
+                    }
                 })
             },
         )?;
+        let page = &pages.by_path[local_page.relative_path.as_str()];
         let is_new = pages.created.contains(local_page.relative_path.as_str());
-        update_content(cms, local_page, page, &html, &hashes, is_new, &mut report)?;
+        update_content(cms, local_page, page, &html, hashes, is_new, &mut report)?;
     }
 
     for (id, name, path) in stale_files {
@@ -118,23 +121,6 @@ pub fn sync(cms: &mut dyn CmsApi, local: &LocalState, to: &Destination) -> Resul
     }
     delete_orphans(cms, &pages.orphans, to.home_page, &mut report)?;
     Ok(report)
-}
-
-/// The local files no page links to.
-fn unlinked_files<'a>(
-    local: &'a LocalState,
-    pool_files: &[BTreeMap<&str, &LocalFile>],
-) -> Vec<&'a str> {
-    let linked: HashSet<&str> = pool_files
-        .iter()
-        .flat_map(|files| files.values().map(|file| file.relative_path.as_str()))
-        .collect();
-    local
-        .files
-        .iter()
-        .map(|file| file.relative_path.as_str())
-        .filter(|path| !linked.contains(path))
-        .collect()
 }
 
 /// Step 1: finds the CMS page of every local page, adopting or creating it if necessary.
@@ -214,20 +200,24 @@ fn adopt(
     Ok(found.map(|index| siblings.remove(index)))
 }
 
-/// Step 2: attaches new and changed files to the page and returns the hashes of all its files.
-/// Files that are no longer linked are only collected in `stale_files`: they are deleted once
+/// Step 2: attaches the page's new and changed files and returns the hashes of all of them.
+/// Files that are gone locally are only collected in `stale_files`: they are deleted once
 /// the content stopped linking to them.
 fn attach_files<'a>(
     cms: &mut dyn CmsApi,
     local_page: &'a LocalPage,
     page: &CmsPage,
-    files: &BTreeMap<&str, &LocalFile>,
     stale_files: &mut Vec<(u64, String, &'a str)>,
     report: &mut Report,
 ) -> Result<BTreeMap<String, String>> {
+    let files: BTreeMap<&str, &[u8]> = local_page
+        .files
+        .iter()
+        .map(|file| (pool_name(file), file.bytes.as_slice()))
+        .collect();
     let hashes: BTreeMap<String, String> = files
         .iter()
-        .map(|(name, file)| ((*name).to_string(), sha256(&file.bytes)))
+        .map(|(name, bytes)| ((*name).to_string(), sha256(bytes)))
         .collect();
 
     // Adopted pages have no marker yet, so what their pool contains has to be asked for.
@@ -242,7 +232,7 @@ fn attach_files<'a>(
 
     for (name, hash) in &hashes {
         if known.get(name) != Some(hash) {
-            cms.pool_put(page.id, name, &files[name.as_str()].bytes)?;
+            cms.pool_put(page.id, name, files[name.as_str()])?;
             println!("+ attached {name} to {}", local_page.relative_path);
             report.files_attached += 1;
         }
@@ -305,8 +295,8 @@ fn delete_orphans(
     for orphan in orphans {
         let source = orphan.source().unwrap_or_default();
         report.deleted += 1;
-        let parent_deleted = LocalPage::parent_of(source, home_page)
-            .is_some_and(|parent| sources.contains(parent.as_str()));
+        let parent_deleted =
+            parent_of(source, home_page).is_some_and(|parent| sources.contains(parent.as_str()));
         if !parent_deleted {
             cms.delete(orphan.id)?;
             println!("- deleted {source} (id {})", orphan.id);
@@ -329,6 +319,7 @@ fn sha256(bytes: &[u8]) -> String {
 mod tests {
     use super::*;
     use crate::cms::mock_client::{FakeCms, ROOT};
+    use crate::local::local_file::LocalFile;
     use serde_json::json;
 
     const TO: Destination = Destination {
@@ -339,34 +330,37 @@ mod tests {
         page_type: "page",
     };
 
-    fn page(path: &str, content: &str) -> LocalPage {
-        LocalPage::parse(path, content, "Home.md").unwrap()
+    fn page(path: &str, content: &str, files: &[(&str, &[u8])]) -> LocalPage {
+        let mut page = LocalPage::parse(path, content, "Home.md").unwrap();
+        page.files = files
+            .iter()
+            .map(|(path, bytes)| LocalFile {
+                relative_path: (*path).into(),
+                bytes: bytes.to_vec(),
+            })
+            .collect();
+        page
     }
 
-    fn file(path: &str, bytes: &[u8]) -> LocalFile {
-        LocalFile {
-            relative_path: path.into(),
-            bytes: bytes.to_vec(),
-        }
-    }
-
-    /// Home, Teaching (with slides) and a lecture below it.
+    /// Home, Teaching (with slides) and a lecture below it (with a plot).
     fn site() -> LocalState {
         LocalState {
             pages: vec![
                 page(
                     "Home.md",
-                    "# Welcome\nSee [teaching](./Teaching/Teaching.md).",
+                    "# Welcome\nSee [teaching](Teaching/Teaching.md).",
+                    &[],
                 ),
                 page(
                     "Teaching/Teaching.md",
-                    "# Teaching\n[PSS](PSS.md), [slides](slides.pdf)",
+                    "# Teaching\n[PSS](PSS/PSS.md), [slides](slides.pdf)",
+                    &[("Teaching/slides.pdf", b"slides")],
                 ),
-                page("Teaching/PSS.md", "# PSS\n![plot](img/plot.png)"),
-            ],
-            files: vec![
-                file("Teaching/slides.pdf", b"slides"),
-                file("Teaching/img/plot.png", b"png"),
+                page(
+                    "Teaching/PSS/PSS.md",
+                    "# PSS\n![plot](plot.png)",
+                    &[("Teaching/PSS/plot.png", b"png")],
+                ),
             ],
         }
     }
@@ -381,19 +375,6 @@ mod tests {
             sha256(b"abc"),
             "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         );
-    }
-
-    #[test]
-    fn finds_unlinked_files() {
-        let mut local = site();
-        local.files.push(file("Teaching/old.pdf", b"old"));
-        let links = Links::new(&local);
-        let pool_files: Vec<_> = local
-            .pages
-            .iter()
-            .map(|page| links.pool_files(page).unwrap())
-            .collect();
-        assert_eq!(unlinked_files(&local, &pool_files), ["Teaching/old.pdf"]);
     }
 
     #[test]
@@ -422,6 +403,7 @@ mod tests {
         );
         assert_eq!(cms.pool(teaching)["slides.pdf"], b"slides");
         assert_eq!(cms.pool(pss)["plot.png"], b"png");
+        assert_eq!(cms.get(pss).source(), Some("Teaching/PSS/PSS.md"));
         assert_eq!(
             cms.get(pss)
                 .pool_hashes()
@@ -430,11 +412,10 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["plot.png"]
         );
-        assert_eq!(cms.get(pss).source(), Some("Teaching/PSS.md"));
     }
 
     #[test]
-    fn attaches_files_before_linking_to_them() {
+    fn attaches_all_files_before_any_page_links_to_them() {
         let mut cms = FakeCms::new();
         upload(&mut cms, &site());
         assert_eq!(
@@ -442,13 +423,34 @@ mod tests {
             [
                 "new_child Teaching",
                 "new_child PSS",
-                "update Home",
                 "pool_put Teaching/slides.pdf",
-                "update Teaching",
                 "pool_put PSS/plot.png",
+                "update Home",
+                "update Teaching",
                 "update PSS",
             ]
         );
+    }
+
+    #[test]
+    fn links_into_the_pool_of_another_page() {
+        let mut cms = FakeCms::new();
+        let mut local = site();
+        local.pages[0] = page("Home.md", "# Welcome\n[slides](Teaching/slides.pdf)", &[]);
+        upload(&mut cms, &local);
+        let teaching = cms.find("Teaching").unwrap();
+        assert!(cms.get(ROOT).content().unwrap().contains(&format!(
+            "pool=slides.pdf&amp;site=parcio&amp;lang=de&amp;id={teaching}"
+        )));
+    }
+
+    #[test]
+    fn attaches_files_nobody_links_to() {
+        let mut cms = FakeCms::new();
+        let mut local = site();
+        local.pages[0] = page("Home.md", "# Welcome", &[("logo.png", b"logo")]);
+        upload(&mut cms, &local);
+        assert_eq!(cms.pool(ROOT)["logo.png"], b"logo");
     }
 
     #[test]
@@ -475,7 +477,7 @@ mod tests {
         cms.writes.clear();
 
         let mut local = site();
-        local.pages[2] = page("Teaching/PSS.md", "# PSS 2026\n![plot](img/plot.png) New.");
+        local.pages[2].title = "PSS 2026".into();
         let report = upload(&mut cms, &local);
         assert_eq!((report.updated, report.unchanged), (1, 2));
         assert_eq!(cms.writes, ["update PSS"]);
@@ -489,7 +491,7 @@ mod tests {
         cms.writes.clear();
 
         let mut local = site();
-        local.files[0] = file("Teaching/slides.pdf", b"slides v2");
+        local.pages[1].files[0].bytes = b"slides v2".to_vec();
         let report = upload(&mut cms, &local);
         assert_eq!(report.files_attached, 1);
         // The marker with the new hash has to be written, too.
@@ -504,13 +506,13 @@ mod tests {
     }
 
     #[test]
-    fn deletes_unlinked_files_after_updating_the_content() {
+    fn deletes_removed_files_after_updating_the_content() {
         let mut cms = FakeCms::new();
         upload(&mut cms, &site());
         cms.writes.clear();
 
         let mut local = site();
-        local.pages[1] = page("Teaching/Teaching.md", "# Teaching\n[PSS](PSS.md)");
+        local.pages[1] = page("Teaching/Teaching.md", "# Teaching\n[PSS](PSS/PSS.md)", &[]);
         let report = upload(&mut cms, &local);
         assert_eq!(report.files_deleted, 1);
         assert_eq!(
@@ -529,8 +531,7 @@ mod tests {
         cms.writes.clear();
 
         let local = LocalState {
-            pages: vec![page("Home.md", "# Welcome")],
-            files: vec![],
+            pages: vec![page("Home.md", "# Welcome", &[])],
         };
         let report = upload(&mut cms, &local);
         assert_eq!(report.deleted, 2);
@@ -554,12 +555,12 @@ mod tests {
         let mut cms = FakeCms::new();
         let teaching = cms.add(ROOT, "Teaching", &json!({}));
         cms.attach(teaching, "slides.pdf", b"old slides");
-        cms.attach(teaching, "unlinked.zip", b"zip");
+        cms.attach(teaching, "gone.zip", b"zip");
 
         let report = upload(&mut cms, &site());
         assert_eq!((report.adopted, report.created), (1, 1));
         assert_eq!(cms.get(teaching).source(), Some("Teaching/Teaching.md"));
-        // The pool was unknown: the linked file is replaced, the unlinked one deleted.
+        // The pool was unknown: the local file is attached again, the other one deleted.
         assert_eq!(
             cms.pool(teaching).keys().collect::<Vec<_>>(),
             ["slides.pdf"]
@@ -571,7 +572,7 @@ mod tests {
     fn changes_nothing_if_a_link_is_broken() {
         let mut cms = FakeCms::new();
         let mut local = site();
-        local.pages[2] = page("Teaching/PSS.md", "# PSS\n[gone](gone.pdf)");
+        local.pages[2] = page("Teaching/PSS/PSS.md", "# PSS\n[gone](gone.pdf)", &[]);
         let error = sync(&mut cms, &local, &TO).unwrap_err();
         assert!(format!("{error:#}").contains("gone.pdf"), "{error:#}");
         assert_eq!(cms.writes, Vec::<String>::new());

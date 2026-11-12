@@ -4,7 +4,7 @@ use crate::settings::credentials::Credentials;
 use anyhow::{Context, bail};
 use reqwest::StatusCode;
 use reqwest::blocking::multipart::{Form, Part};
-use reqwest::blocking::{Client, RequestBuilder};
+use reqwest::blocking::{Client, RequestBuilder, Response};
 use serde_json::Value;
 use std::thread;
 use std::time::Duration;
@@ -13,6 +13,8 @@ use std::time::Duration;
 pub struct CmsConnection {
     pub(super) client: Client,
     rest_url: String,
+    /// E.g. `https://localhost`, for files that are only served by the website, not the API.
+    pub(super) server_url: String,
 }
 
 impl CmsConnection {
@@ -26,6 +28,7 @@ impl CmsConnection {
         let connection = Self {
             client,
             rest_url: config.rest_url(),
+            server_url: config.url.clone(),
         };
 
         let request = connection
@@ -50,29 +53,8 @@ impl CmsConnection {
     /// Sends a request and returns the JSON body (`Null` for an empty one).
     ///
     /// EgoCMS reports many failures with a success status, so the body is checked as well.
-    /// When the server asks to slow down (429), the request is repeated a few times after a pause.
-    pub(super) fn send(mut request: RequestBuilder) -> anyhow::Result<Value> {
-        let mut pause = Duration::from_secs(2);
-        let response = loop {
-            // File uploads can't be cloned, and thus not be repeated.
-            let retry = request.try_clone();
-            let response = request.send()?;
-            match retry {
-                Some(next)
-                    if response.status() == StatusCode::TOO_MANY_REQUESTS
-                        && pause.as_secs() <= 32 =>
-                {
-                    eprintln!(
-                        "The server asks to slow down, waiting {}s.",
-                        pause.as_secs()
-                    );
-                    thread::sleep(pause);
-                    pause *= 2;
-                    request = next;
-                }
-                _ => break response,
-            }
-        };
+    pub(super) fn send(request: RequestBuilder) -> anyhow::Result<Value> {
+        let response = Self::send_with_retry(request)?;
         let status = response.status();
         let url = response.url().path().to_string();
         let text = response.text()?;
@@ -89,6 +71,41 @@ impl CmsConnection {
             bail!("{url} failed: {error}");
         }
         Ok(value)
+    }
+
+    /// Downloads a file from the website, e.g. an attachment of a page.
+    pub(super) fn fetch(request: RequestBuilder) -> anyhow::Result<Vec<u8>> {
+        let response = Self::send_with_retry(request)?;
+        let status = response.status();
+        if !status.is_success() {
+            bail!("{} failed with {status}.", response.url().path());
+        }
+        Ok(response.bytes()?.to_vec())
+    }
+
+    /// Sends a request. When the server asks to slow down (429), it is repeated a few times after a pause.
+    fn send_with_retry(mut request: RequestBuilder) -> anyhow::Result<Response> {
+        let mut pause = Duration::from_secs(2);
+        loop {
+            // File uploads can't be cloned, and thus not be repeated.
+            let retry = request.try_clone();
+            let response = request.send()?;
+            match retry {
+                Some(next)
+                    if response.status() == StatusCode::TOO_MANY_REQUESTS
+                        && pause.as_secs() <= 32 =>
+                {
+                    eprintln!(
+                        "The server asks to slow down, waiting {}s.",
+                        pause.as_secs()
+                    );
+                    thread::sleep(pause);
+                    pause *= 2;
+                    request = next;
+                }
+                _ => return Ok(response),
+            }
+        }
     }
 
     /// The multipart body EgoCMS expects for uploads: `@data` holds the arguments of the PHP method,

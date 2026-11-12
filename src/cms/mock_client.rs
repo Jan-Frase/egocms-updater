@@ -220,6 +220,14 @@ impl CmsApi for FakeCms {
         Ok(())
     }
 
+    fn pool_get(&mut self, id: u64, name: &str) -> anyhow::Result<Vec<u8>> {
+        self.entry(id)?
+            .pool
+            .get(name)
+            .cloned()
+            .with_context(|| format!("Page {id} has no file {name}."))
+    }
+
     fn pool_delete(&mut self, id: u64, name: &str) -> anyhow::Result<()> {
         let page = self.entry(id)?.page.name.clone();
         self.writes.push(format!("pool_delete {page}/{name}"));

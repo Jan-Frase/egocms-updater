@@ -1,25 +1,29 @@
 //! Resolves the relative links in the markdown files and converts them to HTML.
 //!
 //! A link to another `.md` file becomes a link to that page. A link to any other local file
-//! attaches the file to the linking page (its "pool") and points there.
+//! points into the pool of the page owning the file, i.e. the page of the file's directory.
 
 use crate::local::local_file::LocalFile;
 use crate::local::local_page::LocalPage;
 use crate::local::local_state::LocalState;
 use anyhow::{Context, Result, bail};
 use pulldown_cmark::{CowStr, Event, Options, Parser, Tag, html};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 /// What a relative link points to.
 pub enum Target<'a> {
     Page(&'a LocalPage),
-    File(&'a LocalFile),
+    /// A file, attached to the page `owner`.
+    File {
+        owner: &'a LocalPage,
+        file: &'a LocalFile,
+    },
 }
 
-/// Looks up the targets of relative links among the local pages and files.
+/// Looks up the targets of relative links among the local pages and their files.
 pub struct Links<'a> {
     pages: HashMap<&'a str, &'a LocalPage>,
-    files: HashMap<&'a str, &'a LocalFile>,
+    files: HashMap<&'a str, (&'a LocalPage, &'a LocalFile)>,
 }
 
 impl<'a> Links<'a> {
@@ -31,48 +35,38 @@ impl<'a> Links<'a> {
                 .map(|page| (page.relative_path.as_str(), page))
                 .collect(),
             files: local
-                .files
+                .pages
                 .iter()
-                .map(|file| (file.relative_path.as_str(), file))
+                .flat_map(|page| {
+                    page.files
+                        .iter()
+                        .map(move |file| (file.relative_path.as_str(), (page, file)))
+                })
                 .collect(),
         }
     }
 
-    /// The target of a path relative to the pages directory, e.g. `Research/SMASH.md`.
+    /// The target of a path relative to the pages directory, e.g. `Research/SMASH/SMASH.md`.
     pub fn target(&self, path: &str) -> Result<Target<'a>> {
         if let Some(page) = self.pages.get(path) {
             return Ok(Target::Page(page));
         }
         self.files
             .get(path)
-            .map(|file| Target::File(file))
+            .map(|(owner, file)| Target::File { owner, file })
             .with_context(|| format!("{path} does not exist."))
     }
 
-    /// The files `page` links to, by their name in its pool.
-    /// Fails for broken links and for two different files that would get the same name.
-    pub fn pool_files(&self, page: &LocalPage) -> Result<BTreeMap<&'a str, &'a LocalFile>> {
-        let mut files: BTreeMap<&str, &LocalFile> = BTreeMap::new();
+    /// Checks that every relative link of `page` points to an existing page or file.
+    pub fn check(&self, page: &LocalPage) -> Result<()> {
         rewrite_links(&page.markdown, &page.relative_path, &mut |path| {
-            if let Target::File(file) = self.target(path)? {
-                let name = pool_name(file);
-                match files.insert(name, file) {
-                    Some(other) if other.relative_path != file.relative_path => bail!(
-                        "{} and {} would both be attached as {name}.",
-                        other.relative_path,
-                        file.relative_path
-                    ),
-                    _ => {}
-                }
-            }
-            Ok(String::new())
-        })
-        .with_context(|| format!("Checking the links of {} failed.", page.relative_path))?;
-        Ok(files)
+            self.target(path).map(|_| String::new())
+        })?;
+        Ok(())
     }
 }
 
-/// The name of a file in the pool of a page: its file name, without directories.
+/// The name of a file in the pool of its page: the file name, without directories.
 pub fn pool_name(file: &LocalFile) -> &str {
     file.relative_path
         .rsplit('/')
@@ -157,8 +151,8 @@ fn is_relative(url: &str) -> bool {
 }
 
 /// Resolves `link` relative to the directory of the file `current`.
-/// ("Research/Research.md", "./CoSEMoS/CoSEMoS.md") => "Research/CoSEMoS/CoSEMoS.md"
-/// ("Research/JULEA.md",    "../Home.md")           => "Home.md"
+/// ("Research/Research.md", "./SMASH/SMASH.md") => "Research/SMASH/SMASH.md"
+/// ("Research/SMASH/SMASH.md", "../../Home.md") => "Home.md"
 fn resolve_relative(current: &str, link: &str) -> Result<String> {
     let mut parts: Vec<&str> = current.split('/').collect();
     parts.pop();
@@ -183,19 +177,16 @@ fn resolve_relative(current: &str, link: &str) -> Result<String> {
 mod tests {
     use super::*;
 
-    fn page(path: &str, markdown: &str) -> LocalPage {
-        LocalPage::parse(path, &format!("# Title\n{markdown}"), "Home.md").unwrap()
-    }
-
-    fn file(path: &str) -> LocalFile {
-        LocalFile {
-            relative_path: path.into(),
-            bytes: path.as_bytes().to_vec(),
-        }
-    }
-
-    fn state(pages: Vec<LocalPage>, files: Vec<LocalFile>) -> LocalState {
-        LocalState { pages, files }
+    fn page(path: &str, markdown: &str, files: &[&str]) -> LocalPage {
+        let mut page = LocalPage::parse(path, &format!("# Title\n{markdown}"), "Home.md").unwrap();
+        page.files = files
+            .iter()
+            .map(|file| LocalFile {
+                relative_path: (*file).into(),
+                bytes: file.as_bytes().to_vec(),
+            })
+            .collect();
+        page
     }
 
     /// Resolves every target to `URL(target)`, so tests can see what was resolved.
@@ -209,10 +200,13 @@ mod tests {
     fn resolves_paths_relative_to_the_current_file() {
         let r = resolve_relative;
         assert_eq!(
-            r("Research/Research.md", "./CoSEMoS/CoSEMoS.md").unwrap(),
-            "Research/CoSEMoS/CoSEMoS.md"
+            r("Research/Research.md", "./SMASH/SMASH.md").unwrap(),
+            "Research/SMASH/SMASH.md"
         );
-        assert_eq!(r("Research/JULEA.md", "../Home.md").unwrap(), "Home.md");
+        assert_eq!(
+            r("Research/SMASH/SMASH.md", "../../Home.md").unwrap(),
+            "Home.md"
+        );
         assert_eq!(r("a/b/c.md", "./../x/./y.md").unwrap(), "a/x/y.md");
         assert!(r("Home.md", "../x.md").is_err());
         assert!(r("a/b.md", "..").is_err());
@@ -221,13 +215,13 @@ mod tests {
     #[test]
     fn rewrites_relative_links_and_images() {
         let html = render(
-            "[SMASH](./SMASH.md) and ![Plot](plot.png \"A plot\")",
+            "[SMASH](./SMASH/SMASH.md) and ![Plot](plot.png \"A plot\")",
             "Research/Research.md",
         )
         .unwrap();
         assert_eq!(
             html,
-            "<p><a href=\"URL(Research/SMASH.md)\">SMASH</a> and \
+            "<p><a href=\"URL(Research/SMASH/SMASH.md)\">SMASH</a> and \
              <img src=\"URL(Research/plot.png)\" alt=\"Plot\" title=\"A plot\" /></p>\n"
         );
     }
@@ -260,61 +254,53 @@ mod tests {
     }
 
     #[test]
-    fn reports_broken_links_with_the_file() {
-        let local = state(vec![page("Home.md", "[x](./missing.md)")], vec![]);
+    fn finds_pages_and_the_owners_of_files() {
+        let local = LocalState {
+            pages: vec![
+                page("Home.md", "", &["logo.png"]),
+                page("Teaching/Teaching.md", "", &["Teaching/slides.pdf"]),
+            ],
+        };
         let links = Links::new(&local);
-        let error = links.pool_files(&local.pages[0]).unwrap_err();
-        let message = format!("{error:#}");
-        assert!(
-            message.contains("Home.md: broken link `./missing.md`"),
-            "{message}"
-        );
-        assert!(message.contains("missing.md does not exist"), "{message}");
+        assert!(matches!(
+            links.target("Teaching/Teaching.md"),
+            Ok(Target::Page(_))
+        ));
+        let Ok(Target::File { owner, file }) = links.target("Teaching/slides.pdf") else {
+            panic!("slides.pdf is a file");
+        };
+        assert_eq!(owner.relative_path, "Teaching/Teaching.md");
+        assert_eq!(pool_name(file), "slides.pdf");
+        assert!(links.target("Teaching/missing.pdf").is_err());
     }
 
     #[test]
-    fn distinguishes_pages_and_files() {
-        let local = state(vec![page("Home.md", "")], vec![file("a.pdf")]);
-        let links = Links::new(&local);
-        assert!(matches!(links.target("Home.md"), Ok(Target::Page(_))));
-        assert!(matches!(links.target("a.pdf"), Ok(Target::File(_))));
-        assert!(links.target("b.pdf").is_err());
-    }
-
-    #[test]
-    fn collects_the_linked_files_by_pool_name() {
-        let local = state(
-            vec![
+    fn checks_links() {
+        let local = LocalState {
+            pages: vec![
                 page(
                     "Home.md",
-                    "[slides](Teaching/slides.pdf) ![x](img/plot.png) [again](Teaching/slides.pdf) [page](Teaching/Teaching.md)",
+                    "[t](Teaching/Teaching.md) [s](Teaching/slides.pdf)",
+                    &[],
                 ),
-                page("Teaching/Teaching.md", ""),
+                page(
+                    "Teaching/Teaching.md",
+                    "[gone](gone.pdf)",
+                    &["Teaching/slides.pdf"],
+                ),
             ],
-            vec![
-                file("Teaching/slides.pdf"),
-                file("img/plot.png"),
-                file("unused.zip"),
-            ],
-        );
+        };
         let links = Links::new(&local);
-        let files = links.pool_files(&local.pages[0]).unwrap();
-        let names: Vec<_> = files.keys().copied().collect();
-        assert_eq!(names, ["plot.png", "slides.pdf"]);
-        assert_eq!(files["slides.pdf"].relative_path, "Teaching/slides.pdf");
-        assert!(links.pool_files(&local.pages[1]).unwrap().is_empty());
-    }
+        assert!(links.check(&local.pages[0]).is_ok());
 
-    #[test]
-    fn rejects_two_files_with_the_same_pool_name() {
-        let local = state(
-            vec![page("Home.md", "![a](a/plot.png) ![b](b/plot.png)")],
-            vec![file("a/plot.png"), file("b/plot.png")],
-        );
-        let error = Links::new(&local).pool_files(&local.pages[0]).unwrap_err();
+        let message = format!("{:#}", links.check(&local.pages[1]).unwrap_err());
         assert!(
-            format!("{error:#}").contains("would both be attached as plot.png"),
-            "{error:#}"
+            message.contains("Teaching/Teaching.md: broken link `gone.pdf`"),
+            "{message}"
+        );
+        assert!(
+            message.contains("Teaching/gone.pdf does not exist"),
+            "{message}"
         );
     }
 

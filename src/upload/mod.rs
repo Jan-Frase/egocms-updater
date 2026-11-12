@@ -1,7 +1,7 @@
 //! Uploads the local pages and the files they link to.
 
 mod links;
-mod sync;
+pub mod sync;
 
 use crate::cms::cms_connection::CmsConnection;
 use crate::cms::cms_trait::CmsApi;
@@ -14,10 +14,10 @@ use sync::{Destination, sync};
 pub fn upload(config: &Config, credentials: &Credentials) -> Result<()> {
     // Read and check everything locally before touching the CMS.
     let local = LocalState::new(&config.pages_dir, &config.home_page)?;
+    let files: usize = local.pages.iter().map(|page| page.files.len()).sum();
     println!(
-        "Found {} pages and {} files in {}.",
+        "Found {} pages and {files} files in {}.",
         local.pages.len(),
-        local.files.len(),
         config.pages_dir.display()
     );
 

@@ -64,6 +64,13 @@ impl Config {
                 config.home_page
             );
         }
+        // The home page owns the top level of the pages directory.
+        if config.home_page.contains('/') {
+            bail!(
+                "`home_page` must lie directly in the pages directory, got `{}`.",
+                config.home_page
+            );
+        }
         Ok(config)
     }
 
@@ -84,7 +91,7 @@ mod tests {
                 .unwrap();
         assert_eq!(config.url, "https://example.org");
         assert_eq!(config.rest_url(), "https://example.org/rest/");
-        assert_eq!(config.pages_dir, PathBuf::from("../../pages"));
+        assert_eq!(config.pages_dir, PathBuf::from("./pages"));
         assert_eq!(config.home_page, "Home.md");
         assert_eq!(config.home_page_id, None);
         assert_eq!(config.page_type, "page");
@@ -133,6 +140,13 @@ mod tests {
         assert!(
             Config::parse(
                 "url = \"https://x\"\nsite = \"s\"\nlanguage = \"de\"\nhome_page = \"Home.MD\""
+            )
+            .is_err()
+        );
+        // Home page in a subdirectory.
+        assert!(
+            Config::parse(
+                "url = \"https://x\"\nsite = \"s\"\nlanguage = \"de\"\nhome_page = \"start/start.md\""
             )
             .is_err()
         );

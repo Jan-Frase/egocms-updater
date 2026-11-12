@@ -38,6 +38,8 @@ pub trait CmsApi {
     fn pool_put(&mut self, id: u64, name: &str, bytes: &[u8]) -> anyhow::Result<()>;
     /// Removes a file from a page's pool.
     fn pool_delete(&mut self, id: u64, name: &str) -> anyhow::Result<()>;
+    /// Downloads a file from a page's pool.
+    fn pool_get(&mut self, id: u64, name: &str) -> anyhow::Result<Vec<u8>>;
 }
 
 /// Builds the marker: the page's source file and the hashes of the files in its pool.
@@ -71,13 +73,23 @@ pub fn pool_link(site: &str, language: &str, id: u64, name: &str) -> String {
 
 /// Encodes a query value like an HTML form does: `notes v1.txt` => `notes+v1.txt`.
 fn form_encode(value: &str) -> String {
+    percent_encode(value, "+")
+}
+
+/// Encodes a URL path segment: `notes v1.txt` => `notes%20v1.txt`.
+pub fn path_encode(value: &str) -> String {
+    percent_encode(value, "%20")
+}
+
+/// Keeps letters, digits and `-_.~`, writes spaces as `space` and everything else as `%XX`.
+fn percent_encode(value: &str, space: &str) -> String {
     value
         .bytes()
         .map(|byte| match byte {
             b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
                 (byte as char).to_string()
             }
-            b' ' => "+".to_string(),
+            b' ' => space.to_string(),
             other => format!("%{other:02X}"),
         })
         .collect()
@@ -137,6 +149,7 @@ mod tests {
             pool_link("parcio", "de", 7, "Übung #1&2.pdf"),
             "index.php?pool=%C3%9Cbung+%231%262.pdf&site=parcio&lang=de&id=7"
         );
+        assert_eq!(path_encode("PSS-01 Intro.pdf"), "PSS-01%20Intro.pdf");
     }
 
     #[test]
