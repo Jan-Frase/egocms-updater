@@ -82,9 +82,12 @@ pub fn sync(cms: &mut dyn CmsApi, local: &LocalState, to: &Destination) -> Resul
     }
 
     let mut report = Report::default();
+    // Finds or creates the ego_cms page for each local page.
+    // ego_cms pages that no longer have a local partner are marked as orphans and later deleted.
     let pages = ensure_pages_exist(cms, local, to, &mut report)?;
     let id = |page: &LocalPage| pages.by_path[page.relative_path.as_str()].id;
 
+    // Update files if needed.
     let mut stale_files = Vec::new();
     let mut pool_hashes = Vec::new();
     for local_page in &local.pages {
@@ -98,6 +101,7 @@ pub fn sync(cms: &mut dyn CmsApi, local: &LocalState, to: &Destination) -> Resul
         )?);
     }
 
+    // Update page contents if needed.
     for (local_page, hashes) in local.pages.iter().zip(&pool_hashes) {
         let html = rewrite_links(
             &local_page.markdown,
@@ -116,11 +120,13 @@ pub fn sync(cms: &mut dyn CmsApi, local: &LocalState, to: &Destination) -> Resul
         update_content(cms, local_page, page, &html, hashes, is_new, &mut report)?;
     }
 
+    // Remove old files.
     for (id, name, path) in stale_files {
         cms.pool_delete(id, &name)?;
         println!("- removed {name} from {path}");
         report.files_deleted += 1;
     }
+    // Remove delete pages.
     delete_orphans(cms, &pages.orphans, to.home_page, &mut report)?;
     Ok(report)
 }
@@ -155,8 +161,11 @@ fn ensure_pages_exist<'a>(
         let path = local_page.relative_path.as_str();
         let known = remote.remove(path);
         let page = match (&local_page.parent, known) {
+            // Home case:
             (None, _) => home.clone(),
+            // Existing normal page case:
             (Some(_), Some(page)) => page,
+            // New page case:
             (Some(parent), None) => {
                 let parent_id = pages
                     .by_path

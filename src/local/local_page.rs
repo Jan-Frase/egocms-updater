@@ -105,6 +105,11 @@ pub fn parent_of(path: &str, home_page: &str) -> Option<String> {
     if path == home_page {
         return None;
     }
+    // Quick example for this:
+    // If we are asking for the parent of: Research/CoSEMoS/Problem Statement/Problem Statement.md
+    // We go up once with dir_of to: Research/CoSEMoS/Problem Statement
+    // Then again to: Research/CoSEMOs,
+    // And lastly we ask for the page_of_dir which returns Research/CoSEMOS/CoSEMOs.md
     Some(page_of_dir(dir_of(dir_of(path)), home_page))
 }
 

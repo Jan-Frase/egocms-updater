@@ -12,6 +12,8 @@ I/O (ParCIO) group's website and nothing more.
 
 Feel free to fork or ask questions :)
 
+LLM-Disclaimer: Most of the core-code is handwritten but some is generated. Tests, tools, and the ReadMe are LLM-made.
+
 ---
 
 ## Setup
@@ -146,7 +148,9 @@ The GitHub workflow `check.yml` runs these on every push and pull request.
 
 The logic only talks to EgoCMS through the `CmsApi` trait, so everything except the HTTP client is unit tested against
 the in-memory fake. To test against a real instance, start the EgoCMS docker containers and use a config with
-`url = "https://localhost"` and `accept_invalid_certs = true`.
+`url = "https://localhost"` and `accept_invalid_certs = true`. `tools/parcio-mirror/` rebuilds the parcio website in such a
+local instance, to test the migration (see its README). `tools/wipe.py` deletes all pages of a local site except
+its root page, for a fresh start.
 
 ### EgoCMS API quirks worth knowing
 
